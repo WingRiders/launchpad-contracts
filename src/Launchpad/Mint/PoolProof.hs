@@ -9,6 +9,7 @@ import Launchpad.Util
 import Plutarch
 import Plutarch.Api.V2
 import Plutarch.DataRepr
+import Plutarch.Extra.Field (pletAllC)
 import Plutarch.Extra.ScriptContext
 import Plutarch.Extra.TermCont
 import Plutarch.Lift
@@ -95,9 +96,7 @@ pvalidatePoolProofMinting = phoistAcyclic $ plam \cfg context -> unTermCont do
   let poolDatum = ptryFromInlineDatum # poolTxIn.datum
   poolDatumF <- pletFieldsC @'["assetASymbol", "assetBSymbol", "assetAToken", "assetBToken"] (pfromPDatum @PPoolConstantProductDatum # poolDatum)
 
-  datumF <-
-    pletFieldsC @'["projectSymbol", "projectToken", "raisingSymbol", "raisingToken"]
-      (pfromPDatum @PPoolProofDatum # (ptryFromInlineDatum # poolProofOut.datum))
+  datumF <- pletAllC (pfromPDatum @PPoolProofDatum # (ptryFromInlineDatum # poolProofOut.datum))
 
   let correctPool =
         pisCorrectPool
@@ -111,6 +110,9 @@ pvalidatePoolProofMinting = phoistAcyclic $ plam \cfg context -> unTermCont do
       [ ptraceIfFalse "D3" (poolProofMinted #== 1)
       , ptraceIfFalse "D4" (pcountOfUniqueTokens # poolProofOut.value #== 2)
       , ptraceIfFalse "D5" correctPool
+      , -- 0 is WingRidersV2
+        -- 1 is SundaeSwapV3
+        ptraceIfFalse "D6" (pfromData datumF.dex #== 0)
       ]
 
 ppoolProofMintingPolicy :: Term s (PPoolProofPolicyConfig :--> PMintingPolicy)

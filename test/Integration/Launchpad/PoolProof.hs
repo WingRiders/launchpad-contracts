@@ -125,7 +125,7 @@ createPoolProofTx action config poolWrRef =
           )
           (scriptHashToTokenName (toValidatorHash (poolProofValidator config)))
           1
-    poolProofDatum = PoolProofDatum projectSymbol projectToken raisingSymbol raisingToken
+    poolProofDatum = PoolProofDatum projectSymbol projectToken raisingSymbol raisingToken 0
     AssetClass (projectSymbol, projectToken) = config.projectToken
     AssetClass (raisingSymbol, raisingToken) = config.raisingToken
 

@@ -518,6 +518,9 @@ data PoolProofDatum = PoolProofDatum
   , projectToken :: TokenName
   , raisingSymbol :: CurrencySymbol
   , raisingToken :: TokenName
+  , -- 0 is WingRidersV2
+    -- 1 is SundaeSwapV3
+    dex :: Integer
   }
   deriving (Show, Eq, Ord, Generic)
 
@@ -533,6 +536,7 @@ data PPoolProofDatum (s :: S)
               , "projectToken" ':= PTokenName
               , "raisingSymbol" ':= PCurrencySymbol
               , "raisingToken" ':= PTokenName
+              , "dex" ':= PInteger
               ]
           )
       )

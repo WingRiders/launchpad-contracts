@@ -83,7 +83,7 @@ spendRewardsHolderTx action config@LaunchpadConfig {projectToken, raisingToken} 
             _ -> refInputHash poolProofUtxo poolProofDatum
          ]
   where
-    poolProofDatum = PoolProofDatum projectCs projectTn raisingCs raisingTn
+    poolProofDatum = PoolProofDatum projectCs projectTn raisingCs raisingTn 0
     AssetClass (projectCs, projectTn) = projectToken
     AssetClass (raisingCs, raisingTn) = raisingToken
     rewardValue = foldl' (\acc txBox -> (acc <> txBoxValue txBox)) mempty holderBoxes
