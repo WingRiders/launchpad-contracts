@@ -66,7 +66,7 @@ poolProofValidator config = case mkTypedValidatorPlutarchV2 (PP.poolProofValidat
   Left err -> error $ show err
   Right val -> val
 
-poolProofMintingPolicy :: LaunchpadConfig -> TypedPolicy ()
+poolProofMintingPolicy :: LaunchpadConfig -> TypedPolicy Integer
 poolProofMintingPolicy config = case mkTypedPolicyPlutarchV2 (PP.ppoolProofMintingPolicy # pconstant (poolProofPolicyConfig config)) of
   Left err -> error $ show err
   Right val -> val

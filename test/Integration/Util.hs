@@ -321,8 +321,9 @@ finalTokensHolderConfig lCfg =
 poolProofPolicyConfig :: LaunchpadConfig -> PoolProofPolicyConfig
 poolProofPolicyConfig lCfg =
   PoolProofPolicyConfig
-    { poolValidatorHash = lCfg.wrPoolValidatorHash
-    , poolSymbol = lCfg.wrPoolCurrencySymbol
+    { wrPoolValidatorHash = lCfg.wrPoolValidatorHash
+    , wrPoolSymbol = lCfg.wrPoolCurrencySymbol
+    , sundaePoolScriptHash = lCfg.sundaePoolScriptHash
     }
 
 poolProofConfig :: LaunchpadConfig -> PoolProofConfig

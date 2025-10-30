@@ -23,10 +23,10 @@ import PlutusLedgerApi.V1.Value (
 import PlutusLedgerApi.V2 (
   Address (..),
   Credential (..),
-  CurrencySymbol,
+  CurrencySymbol (..),
   POSIXTime,
   PubKeyHash (..),
-  ScriptHash,
+  ScriptHash (..),
   StakingCredential (..),
   TxOutRef (..),
   Value,
@@ -45,6 +45,7 @@ data LaunchpadConfig = LaunchpadConfig
   , wrPoolValidatorHash :: ScriptHash
   , wrFactoryValidatorHash :: ScriptHash
   , wrPoolCurrencySymbol :: CurrencySymbol
+  , sundaePoolScriptHash :: ScriptHash
   , startTime :: POSIXTime
   -- ^ The start time is set to the lowest of the tiers start times.
   , contributionEndTime :: POSIXTime
@@ -151,6 +152,11 @@ mockWrPoolValidatorHash = "36bea2acff0a1c9376b0fd4137ee46fb0f7acfd173ec071e338f8
 mockWrFactoryValidatorHash :: ScriptHash
 mockWrFactoryValidatorHash = "52c6af0c9b744b4eecce838538a52ceb155038b3de68e2bb2fa8fc37"
 
+mockSundaePoolScriptHash :: ScriptHash
+mockSundaePoolScriptHash = ScriptHash hash
+  where
+    CurrencySymbol hash = freeCurrencySymbol
+
 mockWrPoolCurrencySymbol :: CurrencySymbol
 mockWrPoolCurrencySymbol = freeCurrencySymbol
 
@@ -210,6 +216,7 @@ defaultLaunchpadConfig =
     , wrPoolValidatorHash = mockWrPoolValidatorHash
     , wrFactoryValidatorHash = mockWrFactoryValidatorHash
     , wrPoolCurrencySymbol = mockWrPoolCurrencySymbol
+    , sundaePoolScriptHash = mockSundaePoolScriptHash
     , startTime = 20_000 -- Starts in Slot 20
     , contributionEndTime = 500_000 -- Ends in Slot 500
     , withdrawalEndTime = 750_000 -- Ends in Slot 750

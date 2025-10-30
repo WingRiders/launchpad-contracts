@@ -88,7 +88,7 @@ createPoolProofTx action config poolWrRef =
   mconcat
     [ case action of
         NoProofValidityToken -> mempty
-        _ -> mintValue (poolProofMintingPolicy config) () mintedValue
+        _ -> mintValue (poolProofMintingPolicy config) 0 mintedValue
     , refInputHash poolWrRef (lpDatum config.projectToken config.raisingToken)
     , payToScript (poolProofValidator config) (InlineDatum poolProofDatum) mintedValue
     ]
