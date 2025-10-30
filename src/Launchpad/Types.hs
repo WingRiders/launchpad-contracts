@@ -555,7 +555,6 @@ deriving via
     (PConstantDecl PoolProofDatum)
 
 instance PTryFrom PData PPoolProofDatum
-instance PTryFrom PData (PAsData PPoolProofDatum)
 
 type FailProofDatum = ScriptHash
 

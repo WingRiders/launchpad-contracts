@@ -91,7 +91,6 @@ instance DerivePlutusType PVestingDatum where
   type DPTStrat _ = PlutusTypeData
 
 instance PTryFrom PData PVestingDatum
-instance PTryFrom PData (PAsData PVestingDatum)
 
 data VestingRedeemer
   = -- |
