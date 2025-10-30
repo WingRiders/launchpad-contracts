@@ -334,4 +334,6 @@ rewardsHolderConfig lCfg =
   RH.RewardsHolderConfig
     { poolProofValidatorHash = poolProofScriptValidatorHash (poolProofConfig lCfg)
     , poolProofSymbol = poolProofMintingPolicySymbol (poolProofPolicyConfig lCfg)
+    , usesWr = True
+    , usesSundae = False
     }

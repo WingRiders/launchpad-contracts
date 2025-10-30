@@ -89,7 +89,7 @@ pprojectTokensHolderMintingPolicy = phoistAcyclic $
   plam $ \cfg _redeemer context ->
     popaque $ pprojectTokensHolderMintingPolicyTyped # cfg # context
 
-{-
+{- |
 Initialize the launchpad:
   One launchpad holder token is minted
   One list element token is minted

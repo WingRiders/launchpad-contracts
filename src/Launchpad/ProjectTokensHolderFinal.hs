@@ -26,7 +26,6 @@ import Plutarch.Api.V2
 import Plutarch.Bool
 import Plutarch.Crypto (pblake2b_256)
 import Plutarch.DataRepr
-import Plutarch.Extra.Field (pletAllC)
 import Plutarch.Extra.IsData (EnumIsData (..), PlutusTypeEnumData)
 import Plutarch.Extra.ScriptContext (pfromPDatum, ptryFromDatumHash, ptryFromInlineDatum)
 import Plutarch.Extra.TermCont
@@ -231,7 +230,7 @@ instance PTryFrom PData (PAsData PTokenHolderRedeemerFinal)
 projectTokensHolderValidatorTyped ::
   Term s (PTokensHolderFinalConfig :--> PTokenHolderRedeemerFinal :--> PScriptContext :--> PUnit)
 projectTokensHolderValidatorTyped = phoistAcyclic $ plam \cfg redeemer context -> unTermCont do
-  ctxF <- pletAllC context
+  ctxF <- pletFieldsC @'["txInfo", "purpose"] context
   infoF <- pletFieldsC @'["inputs", "outputs", "signatories", "mint", "datums", "referenceInputs"] ctxF.txInfo
   mint <- pletC infoF.mint
   txOutputs <- pletC infoF.outputs
