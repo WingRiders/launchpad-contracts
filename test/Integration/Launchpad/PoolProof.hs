@@ -76,8 +76,8 @@ spendPoolProof config wallet = do
 createPoolProof :: MaliciousPoolProofAction -> LaunchpadConfig -> PubKeyHash -> Run ()
 createPoolProof action config@LaunchpadConfig {wrPoolValidatorHash} wallet = do
   utxos <- case action of
-    IncorrectPoolHash -> utxoAt (TypedValidatorHash @PoolConstantProductDatum (toV2 maliciousScriptHash))
-    _ -> utxoAt (TypedValidatorHash @PoolConstantProductDatum (toV2 wrPoolValidatorHash))
+    IncorrectPoolHash -> utxoAt (TypedValidatorHash @WrPoolConstantProductDatum (toV2 maliciousScriptHash))
+    _ -> utxoAt (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash))
   let (txOutRef, _) = head utxos
 
   tx <- signTx wallet $ createPoolProofTx action config txOutRef
@@ -146,11 +146,11 @@ createWrPoolUTxO action LaunchpadConfig {projectToken, raisingToken, wrPoolValid
   tx <- signTx wallet $ createWrPoolTx action usp wrPoolValidatorHash poolDatum lpValue
   void $ sendTx tx
 
-createWrPoolTx :: MaliciousPoolProofAction -> UserSpend -> ScriptHash -> PoolConstantProductDatum -> Value -> Tx
+createWrPoolTx :: MaliciousPoolProofAction -> UserSpend -> ScriptHash -> WrPoolConstantProductDatum -> Value -> Tx
 createWrPoolTx action usp wrPoolValidatorHash poolDatum val =
   mconcat
     [ userSpend usp
     , case action of
-        IncorrectPoolHash -> payToScript (TypedValidatorHash @PoolConstantProductDatum (toV2 maliciousScriptHash)) (InlineDatum poolDatum) val
-        _ -> payToScript (TypedValidatorHash @PoolConstantProductDatum (toV2 wrPoolValidatorHash)) (InlineDatum poolDatum) val
+        IncorrectPoolHash -> payToScript (TypedValidatorHash @WrPoolConstantProductDatum (toV2 maliciousScriptHash)) (InlineDatum poolDatum) val
+        _ -> payToScript (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash)) (InlineDatum poolDatum) val
     ]

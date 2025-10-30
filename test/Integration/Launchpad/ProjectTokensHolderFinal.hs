@@ -7,7 +7,7 @@ import Integration.Util
 import Integration.Vesting (vestingValidator)
 import Launchpad.Constants qualified as C
 import Launchpad.Mint.ProjectTokensHolder qualified as PTH
-import Launchpad.PoolTypes (PoolConstantProductDatum (..))
+import Launchpad.PoolTypes (WrPoolConstantProductDatum (..))
 import Launchpad.ProjectTokensHolderFinal qualified as PTHF
 import Launchpad.ProjectTokensHolderFirst qualified as PTHFirst
 import Launchpad.Types (PoolProofDatum (..))
@@ -174,7 +174,7 @@ spendHolderCreatePoolTx action config@LaunchpadConfig {owner, daoFeeReceiver, wr
         _ -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NoPool ()
     , payToScript vestingValidator (HashDatum vestingDatum) vestingValue
     , mintValue (poolMintingPolicy) () poolShares
-    , payToScript (TypedValidatorHash @PoolConstantProductDatum (toV2 wrPoolValidatorHash)) (InlineDatum (lpDatum projectToken raisingToken)) (poolValue <> poolToken <> poolShares)
+    , payToScript (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash)) (InlineDatum (lpDatum projectToken raisingToken)) (poolValue <> poolToken <> poolShares)
     , case action of
         NoDaoFees -> payToKey daoFeeReceiver mempty
         LessDaoFees -> payToKey daoFeeReceiver (daoFeeReceiverValue <> inv (assetClassValue raisingToken 1))

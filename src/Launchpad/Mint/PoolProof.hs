@@ -94,7 +94,7 @@ pvalidatePoolProofMinting = phoistAcyclic $ plam \cfg context -> unTermCont do
 
   poolTxIn <- pletFieldsC @'["datum", "value"] poolRefInput
   let poolDatum = ptryFromInlineDatum # poolTxIn.datum
-  poolDatumF <- pletFieldsC @'["assetASymbol", "assetBSymbol", "assetAToken", "assetBToken"] (pfromPDatum @PPoolConstantProductDatum # poolDatum)
+  poolDatumF <- pletFieldsC @'["assetASymbol", "assetBSymbol", "assetAToken", "assetBToken"] (pfromPDatum @PWrPoolConstantProductDatum # poolDatum)
 
   datumF <- pletAllC (pfromPDatum @PPoolProofDatum # (ptryFromInlineDatum # poolProofOut.datum))
 

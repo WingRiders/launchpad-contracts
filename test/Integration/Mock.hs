@@ -244,9 +244,9 @@ defaultLaunchpadConfig =
     , rewardsHolderOilAda = rewardsHolderOilAdaAmount
     }
 
-lpDatum :: AssetClass -> AssetClass -> PoolConstantProductDatum
+lpDatum :: AssetClass -> AssetClass -> WrPoolConstantProductDatum
 lpDatum projectToken raisingToken =
-  PoolConstantProductDatum
+  WrPoolConstantProductDatum
     { requestValidatorHash = mockRequestScriptHash
     , assetASymbol
     , assetAToken
@@ -267,7 +267,7 @@ lpDatum projectToken raisingToken =
     , feeBasis = C.feeBasis
     , projectBeneficiary = Nothing
     , reserveBeneficiary = Nothing
-    , poolSpecifics = ConstantProductPoolDatum
+    , poolSpecifics = WrConstantProductPoolDatum
     }
   where
     (AssetClass (assetASymbol, assetAToken), AssetClass (assetBSymbol, assetBToken)) = if projectToken < raisingToken then (projectToken, raisingToken) else (raisingToken, projectToken)

@@ -438,7 +438,7 @@ pvalidateNoPool
 
     poolOutputF <- pletFieldsC @["address", "datum", "value"] poolUTxO
 
-    let poolDatum = pfromPDatum @PPoolConstantProductDatum #$ (ptryFromInlineDatum # poolOutputF.datum)
+    let poolDatum = pfromPDatum @PWrPoolConstantProductDatum #$ (ptryFromInlineDatum # poolOutputF.datum)
 
     poolDatumF <- pletFieldsC @'["assetASymbol", "assetAToken", "assetBSymbol", "assetBToken"] poolDatum
 
