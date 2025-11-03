@@ -250,7 +250,8 @@ rewardsFoldConfig lCfg =
     , nodeSymbol = N.nodeMintingPolicySymbol (nodePolicyConfig lCfg)
     , rewardsFoldPolicy = R.rewardsFoldMintingPolicySymbol (rewardsFoldPolicyConfig lCfg)
     , rewardsHolderValidatorHash = RH.rewardsHolderScriptValidatorHash (rewardsHolderConfig lCfg)
-    , finalProjectTokensHolderValidatorHash = PTHF.projectTokensHolderScriptValidatorHash (finalTokensHolderConfig lCfg)
+    , finalWrProjectTokensHolderValidatorHash = PTHF.projectTokensHolderScriptValidatorHash (finalWrTokensHolderConfig lCfg)
+    , finalSundaeProjectTokensHolderValidatorHash {- TODO: fix -} = PTHF.projectTokensHolderScriptValidatorHash (finalWrTokensHolderConfig lCfg)
     , firstProjectTokensHolderValidatorHash = PTHFirst.projectTokensHolderScriptValidatorHash (firstTokensHolderConfig lCfg)
     , projectTokensHolderPolicy = PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig lCfg)
     , projectSymbol = fst (unAssetClass lCfg.projectToken)
@@ -262,6 +263,7 @@ rewardsFoldConfig lCfg =
     , withdrawalEndTime = lCfg.withdrawalEndTime
     , rewardsHolderOilAda = lCfg.rewardsHolderOilAda
     , commitFoldFeeAda = lCfg.commitFoldFeeAda
+    , splitBps = 10_000
     }
 
 rewardsFoldPolicyConfig :: LaunchpadConfig -> R.RewardsFoldPolicyConfig
@@ -295,8 +297,8 @@ firstTokensHolderConfig lCfg =
     , usesSundae = lCfg.usesSundae
     }
 
-finalTokensHolderConfig :: LaunchpadConfig -> PTHF.TokensHolderFinalConfig
-finalTokensHolderConfig lCfg =
+finalWrTokensHolderConfig :: LaunchpadConfig -> PTHF.TokensHolderFinalConfig
+finalWrTokensHolderConfig lCfg =
   PTHF.TokensHolderFinalConfig
     { starter = lCfg.starter
     , owner = lCfg.owner

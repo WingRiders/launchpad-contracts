@@ -135,7 +135,7 @@ deriving via
   instance
     (PConstantDecl TokensHolderFinalConfig)
 
-{- | Share token names are unique per pool.
+{- | Share token names are unique per pool for WingRiders.
 In V2 they are computed in the following way:
 shareTokenName = blake2b (blake2b poolType <> blake2b aScale <> blake2b bScale <> blake2b assetA <> blake2b assetB)
 
