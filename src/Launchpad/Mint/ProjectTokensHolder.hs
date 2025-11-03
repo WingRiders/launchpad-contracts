@@ -25,6 +25,7 @@ import Plutarch.Util (
   pcond,
   pcountOfUniqueTokens,
   perrorIfFalse,
+  pfalse,
   pfiniteTxValidityRangeTimestamps,
   pownCurrencySymbol,
   (#>=),
@@ -48,6 +49,8 @@ data TokensHolderPolicyConfig = TokensHolderPolicyConfig
   , collateral :: Integer
   , starter :: TxOutRef
   , nodeSymbol :: CurrencySymbol
+  , usesWr :: Bool
+  , usesSundae :: Bool
   }
   deriving (Show, Eq, Ord, Generic)
 
@@ -67,6 +70,9 @@ data PTokensHolderPolicyConfig (s :: S)
               , "collateral" ':= PInteger
               , "starter" ':= PTxOutRef
               , "nodeSymbol" ':= PCurrencySymbol
+              , -- REVIEW: do we ensure at least one is true?
+                "usesWr" ':= PBool
+              , "usesSundae" ':= PBool
               ]
           )
       )
@@ -85,9 +91,9 @@ deriving via
     (PConstantDecl TokensHolderPolicyConfig)
 
 pprojectTokensHolderMintingPolicy :: Term s (PTokensHolderPolicyConfig :--> PMintingPolicy)
-pprojectTokensHolderMintingPolicy = phoistAcyclic $
+pprojectTokensHolderMintingPolicy =
   plam $ \cfg _redeemer context ->
-    popaque $ pprojectTokensHolderMintingPolicyTyped # cfg # context
+    popaque $ pprojectTokensHolderMintingPolicyTyped cfg context
 
 {- |
 Initialize the launchpad:
@@ -106,8 +112,8 @@ The following must be true of the configuration values:
 Burn:
   One launchpad holder token is burned
 -}
-pprojectTokensHolderMintingPolicyTyped :: Term s (PTokensHolderPolicyConfig :--> PScriptContext :--> PUnit)
-pprojectTokensHolderMintingPolicyTyped = phoistAcyclic $ plam \cfg context -> unTermCont do
+pprojectTokensHolderMintingPolicyTyped :: Term s PTokensHolderPolicyConfig -> Term s PScriptContext -> Term s PUnit
+pprojectTokensHolderMintingPolicyTyped cfg context = unTermCont do
   ctxF <- pletFieldsC @["txInfo", "purpose"] context
   infoF <- pletFieldsC @["inputs", "mint", "outputs", "signatories", "validRange"] ctxF.txInfo
   ownSymbol <- pletC (pownCurrencySymbol ctxF.purpose)
@@ -115,12 +121,25 @@ pprojectTokensHolderMintingPolicyTyped = phoistAcyclic $ plam \cfg context -> un
   PPair ownTn ownCount <- pmatchC (pvalueOfSingleton' # ownSymbol # mint)
   cfgF <-
     pletFieldsC
-      @'["owner", "startTime", "totalTokens", "projectSymbol", "projectToken", "collateral", "starter", "nodeSymbol"]
+      @'["owner", "startTime", "totalTokens", "projectSymbol", "projectToken", "collateral", "starter", "nodeSymbol", "usesWr", "usesSundae"]
       cfg
+
+  -- We mint as many tokens as there are dexes we use
+  expectedMint <-
+    pletC $
+      pcond
+        [ -- We mint/burn two tokens when two dexes are used
+          (cfgF.usesWr #&& cfgF.usesSundae, 2)
+        , -- We mint/burn one token when only one dex is used
+          (cfgF.usesWr #|| cfgF.usesSundae, 1)
+        ]
+        -- We require at least one dex is used
+        (ptraceError "E0")
+
   pure $
     ( pcond
         [
-          ( ptraceIfFalse "E1" $ ownCount #== 1
+          ( ptraceIfFalse "E1" $ ownCount #== expectedMint
           , perrorIfFalse #$ pmatch (pvalueOfSingleton' # cfgF.nodeSymbol # mint) \(PPair nodeTn nodeCount) ->
               pmatch (pfiniteTxValidityRangeTimestamps # infoF.validRange) \(PTimestamps _ upper) ->
                 pand'List
@@ -132,13 +151,13 @@ pprojectTokensHolderMintingPolicyTyped = phoistAcyclic $ plam \cfg context -> un
                         # pisCorrectTokensHolder
                           (cfgF.totalTokens, cfgF.collateral)
                           (cfgF.projectSymbol, cfgF.projectToken)
-                          (ownSymbol, ownTn)
+                          (ownSymbol, ownTn, expectedMint)
                           nodeTn
                         # infoF.outputs
                   , ptraceIfFalse "E6" $ nodeCount #== 1
                   ]
           )
-        , (ownCount #== -1, pconstant ())
+        , (ownCount #== -expectedMint, pconstant ())
         ]
         (ptraceError "E7")
     )
@@ -146,26 +165,30 @@ pprojectTokensHolderMintingPolicyTyped = phoistAcyclic $ plam \cfg context -> un
     pisCorrectTokensHolder ::
       (Term s PInteger, Term s PInteger) ->
       (Term s PCurrencySymbol, Term s PTokenName) ->
-      (Term s PCurrencySymbol, Term s PTokenName) ->
+      (Term s PCurrencySymbol, Term s PTokenName, Term s PInteger) ->
       Term s PTokenName ->
       Term s (PTxOut :--> PBool)
-    pisCorrectTokensHolder (totalTokens, collateral) (projectSymbol, projectToken) (ownSymbol, mintedToken) nodeTn =
-      plam \o ->
-        pletFields @'["address", "value", "datum"] o \oF ->
-          pmatch (pfield @"credential" # oF.address) \case
-            PScriptCredential hash ->
-              (ptraceIfFalse "E8" $ pscriptHashToTokenName (pfromData (pfield @"_0" # hash)) #== mintedToken)
-                #&& pand'List
-                  [ ptraceIfFalse "E9" $ pvalueOf # oF.value # ownSymbol # mintedToken #== 1
-                  , ptraceIfFalse "E10" $ pcountOfUniqueTokens # oF.value #== 3
-                  , ptraceIfFalse "E11" $ pvalueOf # oF.value # projectSymbol # projectToken #== totalTokens
-                  , ptraceIfFalse "E12" $ pvalueOf # oF.value # padaSymbol # padaToken #>= collateral
-                  , ptraceIfFalse "E13" $ pmatch
-                      (pfromPDatum #$ ptryFromInlineDatum # oF.datum)
-                      \(PLaunchpadTokensHolderDatum nodeScriptHash) ->
-                        pscriptHashToTokenName (pfromData nodeScriptHash) #== nodeTn
-                  ]
-            PPubKeyCredential _ -> pconstant False
+    pisCorrectTokensHolder
+      (totalTokens, collateral)
+      (projectSymbol, projectToken)
+      (ownSymbol, mintedToken, expectedCount)
+      nodeTn =
+        plam \o ->
+          pletFields @'["address", "value", "datum"] o \oF ->
+            pmatch (pfield @"credential" # oF.address) \case
+              PScriptCredential hash ->
+                (ptraceIfFalse "E8" $ pscriptHashToTokenName (pfromData (pfield @"_0" # hash)) #== mintedToken)
+                  #&& pand'List
+                    [ ptraceIfFalse "E9" $ pvalueOf # oF.value # ownSymbol # mintedToken #== expectedCount
+                    , ptraceIfFalse "E10" $ pcountOfUniqueTokens # oF.value #== 3
+                    , ptraceIfFalse "E11" $ pvalueOf # oF.value # projectSymbol # projectToken #== totalTokens
+                    , ptraceIfFalse "E12" $ pvalueOf # oF.value # padaSymbol # padaToken #>= collateral
+                    , ptraceIfFalse "E13" $ pmatch
+                        (pfromPDatum #$ ptryFromInlineDatum # oF.datum)
+                        \(PLaunchpadTokensHolderDatum nodeScriptHash) ->
+                          pscriptHashToTokenName (pfromData nodeScriptHash) #== nodeTn
+                    ]
+              PPubKeyCredential _ -> pfalse
 
 projectTokensHolderMintingPolicy :: TokensHolderPolicyConfig -> Script
 projectTokensHolderMintingPolicy cfg = toScript $ pprojectTokensHolderMintingPolicy # pconstant cfg

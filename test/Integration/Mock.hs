@@ -42,6 +42,8 @@ import Test.Util (
 
 data LaunchpadConfig = LaunchpadConfig
   { owner :: Address
+  , usesWr :: Bool
+  , usesSundae :: Bool
   , wrPoolValidatorHash :: ScriptHash
   , wrFactoryValidatorHash :: ScriptHash
   , wrPoolCurrencySymbol :: CurrencySymbol
@@ -213,6 +215,8 @@ defaultLaunchpadConfig :: LaunchpadConfig
 defaultLaunchpadConfig =
   LaunchpadConfig
     { owner = Address (PubKeyCredential mockOwnerPkh) Nothing
+    , usesWr = True
+    , usesSundae = False
     , wrPoolValidatorHash = mockWrPoolValidatorHash
     , wrFactoryValidatorHash = mockWrFactoryValidatorHash
     , wrPoolCurrencySymbol = mockWrPoolCurrencySymbol

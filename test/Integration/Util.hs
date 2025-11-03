@@ -278,6 +278,8 @@ tokensHolderPolicyConfig lCfg =
     , projectToken = snd (unAssetClass lCfg.projectToken)
     , nodeSymbol = N.nodeMintingPolicySymbol (nodePolicyConfig lCfg)
     , collateral = lCfg.collateral
+    , usesWr = lCfg.usesWr
+    , usesSundae = lCfg.usesSundae
     }
 
 firstTokensHolderConfig :: LaunchpadConfig -> PTHFirst.TokensHolderFirstConfig
