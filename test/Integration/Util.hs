@@ -291,6 +291,8 @@ firstTokensHolderConfig lCfg =
     , startTime = lCfg.startTime
     , withdrawalEndTime = lCfg.withdrawalEndTime
     , daoAdmin = lCfg.daoAdmin
+    , usesWr = lCfg.usesWr
+    , usesSundae = lCfg.usesSundae
     }
 
 finalTokensHolderConfig :: LaunchpadConfig -> PTHF.TokensHolderFinalConfig

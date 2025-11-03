@@ -318,8 +318,12 @@ ptryUniqueScriptTxInInfo hash txIns =
 
 -- | Checks whether the passed TxOut has one token of the given minting policy with the token name equal to the TxOut validator hash.
 ptxOutHasAssociatedToken :: Term s PCurrencySymbol -> Term s PTxOut -> Term s PBool
-ptxOutHasAssociatedToken cs o = pletFields @'["value", "address"] o \out ->
-  pvalueOf # out.value # cs # pscriptHashToTokenName (pgetValidatorHashFromScriptAddress # out.address) #== 1
+ptxOutHasAssociatedToken = ptxOutHasAssociatedTokens 1
+
+-- | Checks whether the passed TxOut has tokens of the given minting policy with the token name equal to the TxOut validator hash.
+ptxOutHasAssociatedTokens :: Term s PInteger -> Term s PCurrencySymbol -> Term s PTxOut -> Term s PBool
+ptxOutHasAssociatedTokens count cs o = pletFields @'["value", "address"] o \out ->
+  pvalueOf # out.value # cs # pscriptHashToTokenName (pgetValidatorHashFromScriptAddress # out.address) #== count
 
 pfindScriptOutputs :: Term s (PScriptHash :--> PBuiltinList PTxOut :--> PList (PPair (PValue 'Sorted 'Positive) POutputDatum))
 pfindScriptOutputs = phoistAcyclic $ plam $ \hash txOuts -> pfoldl # (reduction # hash) # pnil # txOuts

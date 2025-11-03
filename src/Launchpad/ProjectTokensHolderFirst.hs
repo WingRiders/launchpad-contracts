@@ -36,6 +36,8 @@ data TokensHolderFirstConfig = TokensHolderFirstConfig
   , starter :: TxOutRef
   , withdrawalEndTime :: POSIXTime
   , daoAdmin :: PubKeyHash
+  , usesWr :: Bool
+  , usesSundae :: Bool
   }
   deriving (Show, Eq, Ord, Generic)
 
@@ -53,6 +55,9 @@ data PTokensHolderFirstConfig (s :: S)
               , "starter" ':= PTxOutRef
               , "withdrawalEndTime" ':= PPOSIXTime
               , "daoAdmin" ':= PPubKeyHash
+              , -- REVIEW: do we ensure at least one is true?
+                "usesWr" ':= PBool
+              , "usesSundae" ':= PBool
               ]
           )
       )
@@ -81,17 +86,18 @@ pvalidateLaunchpadCancellation ::
   Term s PAddress ->
   Term s PPOSIXTime ->
   Term s PCurrencySymbol ->
+  Term s PInteger ->
   Term s PScriptHash ->
   Term s (PBuiltinList (PAsData PPubKeyHash)) ->
   Term s (PValue anyKey anyAmount) ->
   Term s PPOSIXTimeRange ->
   Term s PBool
-pvalidateLaunchpadCancellation owner startTime holderCs selfValidatorHash signatories mint timeInterval =
+pvalidateLaunchpadCancellation owner startTime holderCs validityTokenCount selfValidatorHash signatories mint timeInterval =
   pmatch (pfiniteTxValidityRangeTimestamps # timeInterval) \(PTimestamps _ upper) ->
     pand'List
       [ ptraceIfFalse "K1" $ ptxSignedBy # signatories # (paddressPubKeyCredential # owner)
       , ptraceIfFalse "K2" $ upper #< startTime
-      , ptraceIfFalse "K3" $ pvalueOf # mint # holderCs # pscriptHashToTokenName selfValidatorHash #== (-1)
+      , ptraceIfFalse "K3" $ pvalueOf # mint # holderCs # pscriptHashToTokenName selfValidatorHash #== -validityTokenCount
       ]
 
 pnodeWithRewardsOrFailurePresent ::
@@ -146,7 +152,7 @@ projectTokensHolderFirstValidator ::
   Term s PScriptContext ->
   Term s PBool
 projectTokensHolderFirstValidator cfg datum redeemer context = unTermCont do
-  cfgF <- pletFieldsC @'["owner", "startTime", "projectTokensHolderSymbol", "withdrawalEndTime", "daoAdmin"] cfg
+  cfgF <- pletFieldsC @'["owner", "startTime", "projectTokensHolderSymbol", "withdrawalEndTime", "daoAdmin", "usesWr", "usesSundae"] cfg
   holderCs <- pletC cfgF.projectTokensHolderSymbol
   contextFields <- pletFieldsC @'["purpose", "txInfo"] context
   tx <- pletFieldsC @'["inputs", "referenceInputs", "redeemers", "signatories", "mint", "validRange"] contextFields.txInfo
@@ -154,9 +160,20 @@ projectTokensHolderFirstValidator cfg datum redeemer context = unTermCont do
   selfValidatorHash <- pletC (pgetValidatorHashFromScriptAddress #$ ptxOutAddress # ownInput)
   let nodeScriptHash = pfromData (pto datum)
   PTimestamps lower _ <- pmatchC (pfiniteTxValidityRangeTimestamps # tx.validRange)
+
+  expectedValidityCount <-
+    pletC $
+      pcond
+        [ -- Two tokens when two dexes are used
+          (cfgF.usesWr #&& cfgF.usesSundae, 2)
+        , -- One token when only one dex is used
+          (cfgF.usesWr #|| cfgF.usesSundae, 1)
+        ]
+        (ptraceError "K9")
+
   pure $
     pand'List
-      [ ptxOutHasAssociatedToken holderCs ownInput
+      [ ptxOutHasAssociatedTokens expectedValidityCount holderCs ownInput
       , pmatch
           redeemer
           \case
@@ -165,18 +182,20 @@ projectTokensHolderFirstValidator cfg datum redeemer context = unTermCont do
                 cfgF.owner
                 cfgF.startTime
                 holderCs
+                expectedValidityCount
                 selfValidatorHash
                 tx.signatories
                 tx.mint
                 tx.validRange
             -- Covers both the rewards fold application and the failure case when not enough commitments were made
             PDelegateToRewardsOrFailure _ -> pnodeWithRewardsOrFailurePresent nodeScriptHash tx.inputs tx.redeemers
-            PFirstTokensHolderEmergencyWithdrawal _ -> pfirstHolderEmergencyWithdrawal selfValidatorHash holderCs lower cfgF.daoAdmin tx.inputs tx.mint cfgF.withdrawalEndTime tx.signatories
+            PFirstTokensHolderEmergencyWithdrawal _ -> pfirstHolderEmergencyWithdrawal selfValidatorHash holderCs expectedValidityCount lower cfgF.daoAdmin tx.inputs tx.mint cfgF.withdrawalEndTime tx.signatories
       ]
 
 pfirstHolderEmergencyWithdrawal ::
   Term s PScriptHash ->
   Term s PCurrencySymbol ->
+  Term s PInteger ->
   Term s PPOSIXTime ->
   Term s PPubKeyHash ->
   Term s (PBuiltinList PTxInInfo) ->
@@ -184,11 +203,11 @@ pfirstHolderEmergencyWithdrawal ::
   Term s PPOSIXTime ->
   Term s (PBuiltinList (PAsData PPubKeyHash)) ->
   Term s PBool
-pfirstHolderEmergencyWithdrawal selfValidatorHash holderSymbol lowerTime daoAdmin inputs mint withdrawalEndTime signatories = unTermCont do
+pfirstHolderEmergencyWithdrawal selfValidatorHash holderSymbol validityTokenCount lowerTime daoAdmin inputs mint withdrawalEndTime signatories = unTermCont do
   pure $
     pand'List
       [ ptraceIfFalse "K4" $ pcountAllScriptInputs # inputs #== 1
-      , ptraceIfFalse "K5" $ pvalueOf # mint # holderSymbol # pscriptHashToTokenName selfValidatorHash #== -1
+      , ptraceIfFalse "K5" $ pvalueOf # mint # holderSymbol # pscriptHashToTokenName selfValidatorHash #== -validityTokenCount
       , ptraceIfFalse "K6" $ plength # ((pto . pto) mint) #== 2
       , ptraceIfFalse "K7" $ pto (lowerTime - withdrawalEndTime) #> pconstant emergencyWithdrawalPeriod
       , ptraceIfFalse "K8" $ ptxSignedByPkh # pdata daoAdmin # signatories
