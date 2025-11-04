@@ -3,6 +3,7 @@
 module Launchpad.Mint.ProjectTokensHolder where
 
 import Launchpad.Types
+import Launchpad.Util (pexpectedTokensHolderValidityCount)
 import Plutarch
 import Plutarch.Api.V1 (PCredential (PScriptCredential))
 import Plutarch.Api.V1.Address (PCredential (PPubKeyCredential))
@@ -125,16 +126,7 @@ pprojectTokensHolderMintingPolicyTyped cfg context = unTermCont do
       cfg
 
   -- We mint as many tokens as there are dexes we use
-  expectedMint <-
-    pletC $
-      pcond
-        [ -- We mint/burn two tokens when two dexes are used
-          (cfgF.usesWr #&& cfgF.usesSundae, 2)
-        , -- We mint/burn one token when only one dex is used
-          (cfgF.usesWr #|| cfgF.usesSundae, 1)
-        ]
-        -- We require at least one dex is used
-        (ptraceError "E0")
+  expectedMint <- pletC $ pexpectedTokensHolderValidityCount cfgF.usesWr cfgF.usesSundae
 
   pure $
     ( pcond

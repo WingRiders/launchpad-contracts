@@ -4,6 +4,7 @@ module Launchpad.ProjectTokensHolderFirst where
 
 import Launchpad.Constants
 import Launchpad.Types
+import Launchpad.Util (pexpectedTokensHolderValidityCount)
 import Plutarch
 import Plutarch.Api.V1 (PRedeemer)
 import Plutarch.Api.V1.Value (pvalueOf)
@@ -161,15 +162,7 @@ projectTokensHolderFirstValidator cfg datum redeemer context = unTermCont do
   let nodeScriptHash = pfromData (pto datum)
   PTimestamps lower _ <- pmatchC (pfiniteTxValidityRangeTimestamps # tx.validRange)
 
-  expectedValidityCount <-
-    pletC $
-      pcond
-        [ -- Two tokens when two dexes are used
-          (cfgF.usesWr #&& cfgF.usesSundae, 2)
-        , -- One token when only one dex is used
-          (cfgF.usesWr #|| cfgF.usesSundae, 1)
-        ]
-        (ptraceError "K9")
+  expectedValidityCount <- pletC $ pexpectedTokensHolderValidityCount cfgF.usesWr cfgF.usesSundae
 
   pure $
     pand'List

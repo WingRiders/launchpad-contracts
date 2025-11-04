@@ -9,6 +9,18 @@ import Plutarch.Mint.Util
 import Plutarch.Prelude
 import Plutarch.Util
 
+pexpectedTokensHolderValidityCount ::
+  Term s PBool -> Term s PBool -> Term s PInteger
+pexpectedTokensHolderValidityCount usesWr usesSundae =
+  pcond
+    [ -- Two tokens when two dexes are used
+      (usesWr #&& usesSundae, 2)
+    , -- One token when only one dex is used
+      (usesWr #|| usesSundae, 1)
+    ]
+    -- At least one dex must be used
+    (ptraceError "tkvc")
+
 ptierParams ::
   Term s PTier ->
   (Term s PInteger, Term s PInteger, Term s PPOSIXTime) ->
