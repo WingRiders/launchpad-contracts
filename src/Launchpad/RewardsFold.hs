@@ -37,8 +37,7 @@ data RewardsFoldConfig = RewardsFoldConfig
   , nodeSymbol :: CurrencySymbol
   , rewardsFoldPolicy :: CurrencySymbol
   , rewardsHolderValidatorHash :: ScriptHash
-  , finalWrProjectTokensHolderValidatorHash :: ScriptHash
-  , finalSundaeProjectTokensHolderValidatorHash :: ScriptHash
+  , finalProjectTokensHolderValidatorHash :: ScriptHash
   , firstProjectTokensHolderValidatorHash :: ScriptHash
   , projectTokensHolderPolicy :: CurrencySymbol
   , projectSymbol :: CurrencySymbol
@@ -70,8 +69,7 @@ data PRewardsFoldConfig (s :: S)
               , "nodeSymbol" ':= PCurrencySymbol
               , "rewardsFoldPolicy" ':= PCurrencySymbol
               , "rewardsHolderValidatorHash" ':= PScriptHash
-              , "finalWrProjectTokensHolderValidatorHash" ':= PScriptHash
-              , "finalSundaeProjectTokensHolderValidatorHash" ':= PScriptHash
+              , "finalProjectTokensHolderValidatorHash" ':= PScriptHash
               , "firstProjectTokensHolderValidatorHash" ':= PScriptHash
               , "projectTokensHolderPolicy" ':= PCurrencySymbol
               , "projectSymbol" ':= PCurrencySymbol
@@ -465,8 +463,7 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
         @'[ "nodeSymbol"
           , "rewardsFoldPolicy"
           , "rewardsHolderValidatorHash"
-          , "finalWrProjectTokensHolderValidatorHash"
-          , "finalSundaeProjectTokensHolderValidatorHash"
+          , "finalProjectTokensHolderValidatorHash"
           , "firstProjectTokensHolderValidatorHash"
           , "projectTokensHolderPolicy"
           , "projectSymbol"
@@ -502,8 +499,7 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
     pprojectToken <- pletC cfgF.projectToken
     pcommittedSymbol <- pletC cfgF.raisingSymbol
     pcommittedToken <- pletC cfgF.raisingToken
-    projectTokensHolderFinalWrValidatorHash <- pletC cfgF.finalWrProjectTokensHolderValidatorHash
-    projectTokensHolderFinalSundaeValidatorHash <- pletC cfgF.finalSundaeProjectTokensHolderValidatorHash
+    projectTokensHolderFinalValidatorHash <- pletC cfgF.finalProjectTokensHolderValidatorHash
     projectTokensHolderFirstValidatorHash <- pletC cfgF.firstProjectTokensHolderValidatorHash
     projectTokensHolderCs <- pletC cfgF.projectTokensHolderPolicy
 
@@ -588,8 +584,7 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
                 selfF.commitFoldOwner
                 expectedOutAda
                 projectTokensHolderInput.address
-                projectTokensHolderFinalWrValidatorHash
-                projectTokensHolderFinalSundaeValidatorHash
+                projectTokensHolderFinalValidatorHash
                 projectTokensHolderFirstValidatorHash
                 projectTokensHolderCs
                 inputHolderAda
@@ -635,7 +630,6 @@ pcheckLastRewardsFold ::
   Term s PAddress ->
   Term s PScriptHash ->
   Term s PScriptHash ->
-  Term s PScriptHash ->
   Term s PCurrencySymbol ->
   Term s PInteger ->
   Term s PInteger ->
@@ -657,8 +651,7 @@ pcheckLastRewardsFold
   commitFoldOwner
   expectedOutAda
   projectTokensHolderInputAddress
-  projectTokensHolderFinalWrValidatorHash
-  projectTokensHolderFinalSundaeValidatorHash
+  projectTokensHolderFinalValidatorHash
   projectTokensHolderFirstValidatorHash
   projectTokensHolderCs
   inputHolderAda
@@ -679,95 +672,96 @@ pcheckLastRewardsFold
         wrProjectExpected = pdivideCeil # (totalProjectOut * splitBps) # 10_000
         sundaeProjectExpected = totalProjectOut - wrProjectExpected
 
-        isHolderOutputWrCorrect =
-          pif
-            (splitBps #> 0)
-            ( unTermCont do
-                outWr <-
-                  pletFieldsC @'["address", "datum", "value"]
-                    ( passertSingleton "L29"
-                        #$ pfilter
-                        # plam
-                          ( \o ->
-                              ppaysToCredential # projectTokensHolderFinalWrValidatorHash # o
-                          )
-                        # outputs
-                    )
-                outWrValue <- pletC outWr.value
-                let outWrCommitted =
-                      pvalueOf
-                        # outWrValue
-                        # pcommittedSymbol
-                        # pcommittedToken
-                    outWrProject =
-                      pvalueOf
-                        # outWrValue
-                        # pprojectSymbol
-                        # pprojectToken
-                    outWrAda =
-                      pvalueOf # outWrValue # padaSymbol # padaToken
-                pure $
-                  pand'List
-                    [ ptraceIfFalse "L30" $
-                        (ptryFromInlineDatum # outWr.datum)
-                          #== pcon (PDatum (pforgetData (pdata (pcon PWr))))
-                    , ptraceIfFalse "L31" $ phaveSameStakingCredentials # projectTokensHolderInputAddress # outWr.address
-                    , ptraceIfFalse "L32" $ wrCommittedExpected #== outWrCommitted
-                    , ptraceIfFalse "L33" $ wrProjectExpected #== outWrProject
-                    , -- Collateral portion and oil
-                      ptraceIfFalse "L34" $ wrAdaExpected #<= outWrAda
-                    , -- ada, committed and project tokens
-                      ptraceIfFalse "L35?" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol outWrValue #== 3
-                    ]
-            )
-            ptrue
+        -- Called with the correct utxo when a Wr pool is expected
+        isHolderOutputWrCorrect outWr' = unTermCont do
+          outWr <- pletFieldsC @'["address", "datum", "value"] outWr'
+          outWrValue <- pletC outWr.value
+          let outWrCommitted =
+                pvalueOf
+                  # outWrValue
+                  # pcommittedSymbol
+                  # pcommittedToken
+              outWrProject =
+                pvalueOf
+                  # outWrValue
+                  # pprojectSymbol
+                  # pprojectToken
+              outWrAda =
+                pvalueOf # outWrValue # padaSymbol # padaToken
+          pure $
+            pand'List
+              [ ptraceIfFalse "L30" $
+                  (ptryFromInlineDatum # outWr.datum)
+                    #== (pcon . PDatum . pforgetData . pdata . pcon $ PWr)
+              , ptraceIfFalse "L31" $ phaveSameStakingCredentials # projectTokensHolderInputAddress # outWr.address
+              , ptraceIfFalse "L32" $ wrCommittedExpected #== outWrCommitted
+              , ptraceIfFalse "L33" $ wrProjectExpected #== outWrProject
+              , -- Collateral portion and oil
+                ptraceIfFalse "L34" $ wrAdaExpected #<= outWrAda
+              , -- ada, committed and project tokens
+                ptraceIfFalse "L36" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol outWrValue #== 3
+              ]
 
-        isHolderOutputSundaeCorrect =
-          pif
-            (splitBps #< 10_000)
-            ( unTermCont do
-                outSundae <-
-                  pletFieldsC @'["address", "datum", "value"]
-                    ( passertSingleton "TODO"
-                        #$ pfilter
-                        # plam
-                          ( \o ->
-                              ppaysToCredential # projectTokensHolderFinalSundaeValidatorHash # o
-                          )
-                        # outputs
-                    )
-                outSundaeValue <- pletC outSundae.value
-                let outSundaeCommitted =
-                      pvalueOf
-                        # outSundaeValue
-                        # pcommittedSymbol
-                        # pcommittedToken
-                    outSundaeProject =
-                      pvalueOf
-                        # outSundaeValue
-                        # pprojectSymbol
-                        # pprojectToken
-                    outSundaeAda =
-                      pvalueOf # outSundaeValue # padaSymbol # padaToken
-                pure $
-                  pand'List
-                    [ (ptryFromInlineDatum # outSundae.datum)
-                        #== pcon (PDatum (pforgetData (pdata (pcon PSundae))))
-                    , phaveSameStakingCredentials # projectTokensHolderInputAddress # outSundae.address
-                    , sundaeCommittedExpected #== outSundaeCommitted
-                    , sundaeProjectExpected #== outSundaeProject
-                    , -- Collateral portion and oil
-                      sundaeAdaExpected #<= outSundaeAda
-                    , -- ada, committed and project tokens
-                      pcountOfUniqueTokensWithOverlap pcommittedSymbol outSundaeValue #== 3
-                    ]
-            )
-            ptrue
+        -- Called with the correct utxo when a Sundae pool is expected
+        isHolderOutputSundaeCorrect outSundae' = unTermCont do
+          outSundae <- pletFieldsC @'["address", "datum", "value"] outSundae'
+          outSundaeValue <- pletC outSundae.value
+          let outSundaeCommitted =
+                pvalueOf
+                  # outSundaeValue
+                  # pcommittedSymbol
+                  # pcommittedToken
+              outSundaeProject =
+                pvalueOf
+                  # outSundaeValue
+                  # pprojectSymbol
+                  # pprojectToken
+              outSundaeAda =
+                pvalueOf # outSundaeValue # padaSymbol # padaToken
+          pure $
+            pand'List
+              [ (ptryFromInlineDatum # outSundae.datum)
+                  #== (pcon . PDatum . pforgetData . pdata . pcon $ PSundae)
+              , phaveSameStakingCredentials # projectTokensHolderInputAddress # outSundae.address
+              , sundaeCommittedExpected #== outSundaeCommitted
+              , sundaeProjectExpected #== outSundaeProject
+              , -- Collateral portion and oil
+                sundaeAdaExpected #<= outSundaeAda
+              , -- ada, committed and project tokens
+                pcountOfUniqueTokensWithOverlap pcommittedSymbol outSundaeValue #== 3
+              ]
+
+    tokenHolders <-
+      pletC
+        ( pfilter
+            # plam
+              ( \o ->
+                  ppaysToCredential # projectTokensHolderFinalValidatorHash # o
+              )
+            # outputs
+        )
 
     pure $
       pand'List
-        [ isHolderOutputWrCorrect
-        , isHolderOutputSundaeCorrect
+        [ pcond
+            [
+              ( --  splitBps = 10_000 means everything goes to WingRiders
+                splitBps #== 10_000
+              , isHolderOutputWrCorrect (passertSingleton "L29" # tokenHolders)
+              )
+            ,
+              ( --  splitBps = 0 means everything goes to Sundae
+                splitBps #== 0
+              , isHolderOutputSundaeCorrect (passertSingleton "L29.5" # tokenHolders)
+              )
+            ]
+            ( -- In case we need both pools, we require strict ordering
+              pmatch (passertDoubleton tokenHolders) \(PPair outWr outSundae) ->
+                pand'List
+                  [ isHolderOutputWrCorrect outWr
+                  , isHolderOutputSundaeCorrect outSundae
+                  ]
+            )
         , ptraceIfFalse "L35" $ pvalueOf # mint # selfCs # pscriptHashToTokenName selfValidatorHash #== -1
         , ptraceIfFalse "L36" $ pvalueOf # mint # projectTokensHolderCs # pscriptHashToTokenName projectTokensHolderFirstValidatorHash #== -1
         , ptraceIfFalse "L37" $ pnot # (pelem # pdata commitFoldCompensationIndex # outputNodesIndices)
