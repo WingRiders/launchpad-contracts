@@ -1,6 +1,4 @@
 {-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 
 module Launchpad.ProjectTokensHolderFinal (
   projectTokensHolderScriptValidator,
@@ -66,9 +64,7 @@ data TokensHolderFinalConfig = TokensHolderFinalConfig
   { owner :: Address
   , daoFeeUnits :: Integer
   , daoFeeBase :: Integer
-  , tokensToDistribute :: Integer
   , raisedTokensPoolPartPercentage :: Integer
-  , totalTokens :: Integer
   , collateral :: Integer
   , poolSymbol :: CurrencySymbol
   , poolValidatorHash :: ScriptHash
@@ -99,9 +95,7 @@ data PTokensHolderFinalConfig (s :: S)
               [ "owner" ':= PAddress
               , "daoFeeUnits" ':= PInteger
               , "daoFeeBase" ':= PInteger
-              , "tokensToDistribute" ':= PInteger
               , "raisedTokensPoolPartPercentage" ':= PInteger
-              , "totalTokens" ':= PInteger
               , "collateral" ':= PInteger
               , "poolSymbol" ':= PCurrencySymbol
               , "poolValidatorHash" ':= PScriptHash
@@ -242,9 +236,7 @@ projectTokensHolderValidatorTyped cfg redeemer context = unTermCont do
       @'[ "owner"
         , "daoFeeUnits"
         , "daoFeeBase"
-        , "tokensToDistribute"
         , "raisedTokensPoolPartPercentage"
-        , "totalTokens"
         , "collateral"
         , "poolSymbol"
         , "poolValidatorHash"
