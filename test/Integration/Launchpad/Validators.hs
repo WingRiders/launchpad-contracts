@@ -28,9 +28,9 @@ projectTokensHolderFirstValidator config = case mkTypedValidatorPlutarchV2
   Left err -> error $ show err
   Right val -> val
 
-projectTokensHolderFinalValidator :: LaunchpadConfig -> TypedValidator () PTHF.TokenHolderRedeemerFinal
+projectTokensHolderFinalValidator :: LaunchpadConfig -> TypedValidator () PTHF.TokensHolderFinalRedeemer
 projectTokensHolderFinalValidator config = case mkTypedValidatorPlutarchV2
-  (PTHF.projectTokensHolderValidator # pconstant (finalWrTokensHolderConfig config)) of
+  (PTHF.projectTokensHolderValidator # pconstant (finalTokensHolderConfig config)) of
   Left err -> error $ show err
   Right val -> val
 

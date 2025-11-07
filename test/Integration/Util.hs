@@ -250,8 +250,7 @@ rewardsFoldConfig lCfg =
     , nodeSymbol = N.nodeMintingPolicySymbol (nodePolicyConfig lCfg)
     , rewardsFoldPolicy = R.rewardsFoldMintingPolicySymbol (rewardsFoldPolicyConfig lCfg)
     , rewardsHolderValidatorHash = RH.rewardsHolderScriptValidatorHash (rewardsHolderConfig lCfg)
-    , finalWrProjectTokensHolderValidatorHash = PTHF.projectTokensHolderScriptValidatorHash (finalWrTokensHolderConfig lCfg)
-    , finalSundaeProjectTokensHolderValidatorHash {- TODO: fix -} = PTHF.projectTokensHolderScriptValidatorHash (finalWrTokensHolderConfig lCfg)
+    , finalProjectTokensHolderValidatorHash = PTHF.projectTokensHolderScriptValidatorHash (finalTokensHolderConfig lCfg)
     , firstProjectTokensHolderValidatorHash = PTHFirst.projectTokensHolderScriptValidatorHash (firstTokensHolderConfig lCfg)
     , projectTokensHolderPolicy = PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig lCfg)
     , projectSymbol = fst (unAssetClass lCfg.projectToken)
@@ -293,8 +292,8 @@ firstTokensHolderConfig lCfg =
     , daoAdmin = lCfg.daoAdmin
     }
 
-finalWrTokensHolderConfig :: LaunchpadConfig -> PTHF.TokensHolderFinalConfig
-finalWrTokensHolderConfig lCfg =
+finalTokensHolderConfig :: LaunchpadConfig -> PTHF.TokensHolderFinalConfig
+finalTokensHolderConfig lCfg =
   PTHF.TokensHolderFinalConfig
     { starter = lCfg.starter
     , owner = lCfg.owner

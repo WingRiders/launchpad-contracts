@@ -3,7 +3,7 @@ module Integration.Launchpad.ProjectTokensHolderFinalTest where
 import Integration.Launchpad.PoolProof (createPoolProof, createWrPoolUTxO)
 import Integration.Launchpad.PoolProof qualified as PP
 import Integration.Launchpad.ProjectTokensHolderFinal (
-  MaliciousWrTokenHolderAction (..),
+  MaliciousTokensHolderAction (..),
   createProjectTokensHolderFinal,
   spendHolderCreatePool,
   spendHolderPoolExists,
@@ -44,7 +44,7 @@ spendTestsNoPool =
   , bad defaultLaunchpadConfig "Fails when token holders is doublespent and dao fees stolen" double_spend_two_token_holders
   ]
 
-lock_to_pool :: MaliciousWrTokenHolderAction -> LaunchpadConfig -> Run ()
+lock_to_pool :: MaliciousTokensHolderAction -> LaunchpadConfig -> Run ()
 lock_to_pool action config = do
   Wallets {..} <- setupWallets config
   adminWallet <- getMainUser
@@ -64,7 +64,7 @@ spendTestsPoolExists =
   , bad defaultLaunchpadConfig "Fails when wrong pool proof is present" (move_funds_to_dao WrongPoolProof)
   ]
 
-move_funds_to_dao :: MaliciousWrTokenHolderAction -> LaunchpadConfig -> Run ()
+move_funds_to_dao :: MaliciousTokensHolderAction -> LaunchpadConfig -> Run ()
 move_funds_to_dao action config = do
   Wallets {..} <- setupWallets config
   adminWallet <- getMainUser

@@ -6,7 +6,7 @@ module Launchpad.ProjectTokensHolderFinal (
   projectTokensHolderScriptAddress,
   projectTokensHolderScript,
   projectTokensHolderValidator,
-  TokenHolderRedeemerFinal (..),
+  TokensHolderFinalRedeemer (..),
   TokensHolderFinalConfig (..),
 )
 where
@@ -169,22 +169,22 @@ ppaysAtleastToAddress symbol token amount address =
         , pcountOfUniqueTokensWithOverlap symbol outF.value #== 2
         ]
 
-data TokenHolderRedeemerFinal
+data TokensHolderFinalRedeemer
   = PoolExists
   | NoPool
   deriving stock (Generic, Enum, Bounded)
-  deriving (PlutusTx.ToData, PlutusTx.FromData) via (EnumIsData TokenHolderRedeemerFinal)
+  deriving (PlutusTx.ToData, PlutusTx.FromData) via (EnumIsData TokensHolderFinalRedeemer)
 
-data PTokenHolderRedeemerFinal (s :: S)
+data PTokensHolderFinalRedeemer (s :: S)
   = PPoolExists
   | PNoPool
   deriving stock (Generic, Enum, Bounded)
   deriving anyclass (PlutusType, PIsData, PEq, PShow)
 
-instance DerivePlutusType PTokenHolderRedeemerFinal where
+instance DerivePlutusType PTokensHolderFinalRedeemer where
   type DPTStrat _ = PlutusTypeEnumData
 
-instance PTryFrom PData (PAsData PTokenHolderRedeemerFinal)
+instance PTryFrom PData (PAsData PTokensHolderFinalRedeemer)
 
 {-
     The pool doesn't exist:
@@ -218,8 +218,7 @@ instance PTryFrom PData (PAsData PTokenHolderRedeemerFinal)
         DAO wallet utxo holds at most 3 unique tokens, ADA project token, raised token
         there are two script inputs
 -}
-projectTokensHolderValidatorTyped ::
-  Term s PTokensHolderFinalConfig -> Term s PTokenHolderRedeemerFinal -> Term s PScriptContext -> Term s PUnit
+projectTokensHolderValidatorTyped :: Term s PTokensHolderFinalConfig -> Term s PTokensHolderFinalRedeemer -> Term s PScriptContext -> Term s PUnit
 projectTokensHolderValidatorTyped cfg redeemer context = unTermCont do
   ctxF <- pletFieldsC @'["txInfo", "purpose"] context
   infoF <- pletFieldsC @'["inputs", "outputs", "signatories", "mint", "datums", "referenceInputs"] ctxF.txInfo
@@ -511,7 +510,7 @@ pvalidateNoPool
 projectTokensHolderValidator :: Term s (PTokensHolderFinalConfig :--> PValidator)
 projectTokensHolderValidator = plam $ \cfg _dat redm' context -> unTermCont do
   (_dat, _) <- ptryFromC @(PAsData PUnit) _dat
-  (redm, _) <- ptryFromC @(PAsData PTokenHolderRedeemerFinal) redm'
+  (redm, _) <- ptryFromC @(PAsData PTokensHolderFinalRedeemer) redm'
   pure $ popaque $ projectTokensHolderValidatorTyped cfg (pfromData redm) context
 
 projectTokensHolderScriptValidator :: TokensHolderFinalConfig -> Script

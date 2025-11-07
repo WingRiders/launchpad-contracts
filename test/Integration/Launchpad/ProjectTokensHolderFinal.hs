@@ -19,7 +19,7 @@ import PlutusLedgerApi.V2 (PubKeyHash, TxOutRef, Value, singleton)
 import PlutusTx.Prelude (inv)
 import Test.Util (vUSDT)
 
-data MaliciousWrTokenHolderAction
+data MaliciousTokensHolderAction
   = None
   | WrongHashOrder
   | WrongBeneficiary
@@ -60,7 +60,7 @@ createProjectTokensHolderFinalTx config usp val =
     , payToScript (projectTokensHolderFinalValidator config) (InlineDatum ()) val
     ]
 
-spendHolderCreatePool :: MaliciousWrTokenHolderAction -> LaunchpadConfig -> PubKeyHash -> PubKeyHash -> Run ()
+spendHolderCreatePool :: MaliciousTokensHolderAction -> LaunchpadConfig -> PubKeyHash -> PubKeyHash -> Run ()
 spendHolderCreatePool action config@LaunchpadConfig {..} wallet signer = do
   submitTx wallet createMockFactoryTx
   [(factoryRef, _)] <- utxoAt mockFactoryScript
@@ -142,7 +142,7 @@ spendHolderCreatePool action config@LaunchpadConfig {..} wallet signer = do
 createMockFactoryTx :: Tx
 createMockFactoryTx = mconcat [payToScript mockFactoryScript (InlineDatum ()) mempty]
 
-spendHolderCreatePoolTx :: MaliciousWrTokenHolderAction -> LaunchpadConfig -> UserSpend -> TxOutRef -> [TxBox (TypedValidator () PTHF.TokenHolderRedeemerFinal)] -> VestingDatum -> Value -> Value -> Value -> Value -> Value -> Value -> Value -> Tx
+spendHolderCreatePoolTx :: MaliciousTokensHolderAction -> LaunchpadConfig -> UserSpend -> TxOutRef -> [TxBox (TypedValidator () PTHF.TokensHolderFinalRedeemer)] -> VestingDatum -> Value -> Value -> Value -> Value -> Value -> Value -> Value -> Tx
 spendHolderCreatePoolTx action config@LaunchpadConfig {owner, daoFeeReceiver, wrPoolValidatorHash, projectToken, raisingToken} usp mockFactoryRef holderUtxos vestingDatum mintedValue poolValue poolToken poolShares vestingValue ownerValue daoFeeReceiverValue = do
   let holderUtxo = head holderUtxos
       otherHolderUtxo = holderUtxos !! 1
@@ -174,7 +174,7 @@ spendHolderCreatePoolTx action config@LaunchpadConfig {owner, daoFeeReceiver, wr
         _ -> payToKey owner ownerValue
     ]
 
-spendHolderPoolExists :: MaliciousWrTokenHolderAction -> LaunchpadConfig -> PubKeyHash -> PubKeyHash -> Run ()
+spendHolderPoolExists :: MaliciousTokensHolderAction -> LaunchpadConfig -> PubKeyHash -> PubKeyHash -> Run ()
 spendHolderPoolExists action config@LaunchpadConfig {..} wallet signer = do
   [holderUtxo] <- boxAt (projectTokensHolderFinalValidator config)
   [poolProofUtxo] <- boxAt (poolProofValidator config)
@@ -212,7 +212,7 @@ spendHolderPoolExists action config@LaunchpadConfig {..} wallet signer = do
 
   submitTx wallet =<< signTx signer (spendHolderPoolExistsTx action config holderUtxo poolProofUtxo ownerValue daoFeeReceiverValue)
 
-spendHolderPoolExistsTx :: MaliciousWrTokenHolderAction -> LaunchpadConfig -> TxBox (TypedValidator () PTHF.TokenHolderRedeemerFinal) -> TxBox (TypedValidator PoolProofDatum ()) -> Value -> Value -> Tx
+spendHolderPoolExistsTx :: MaliciousTokensHolderAction -> LaunchpadConfig -> TxBox (TypedValidator () PTHF.TokensHolderFinalRedeemer) -> TxBox (TypedValidator PoolProofDatum ()) -> Value -> Value -> Tx
 spendHolderPoolExistsTx action config@LaunchpadConfig {owner, daoFeeReceiver} holderUtxo poolProofUtxo ownerValue daoFeeReceiverValue =
   mconcat
     [ case action of
