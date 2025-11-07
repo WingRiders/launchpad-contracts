@@ -8,7 +8,7 @@ import Integration.Vesting (vestingValidator)
 import Launchpad.Constants qualified as C
 import Launchpad.PoolTypes (WrPoolConstantProductDatum (..))
 import Launchpad.ProjectTokensHolderFinal qualified as PTHF
-import Launchpad.Types (PoolProofDatum (..))
+import Launchpad.Types (Dex (..), PoolProofDatum (..))
 import Other.Vesting (VestingDatum (..))
 import Plutus.Model
 import Plutus.Util (adaAssetClass)
@@ -57,7 +57,7 @@ createProjectTokensHolderFinalTx :: LaunchpadConfig -> UserSpend -> Value -> Tx
 createProjectTokensHolderFinalTx config usp val =
   mconcat
     [ userSpend usp
-    , payToScript (projectTokensHolderFinalValidator config) (InlineDatum ()) val
+    , payToScript (projectTokensHolderFinalValidator config) (InlineDatum Wr) val
     ]
 
 spendHolderCreatePool :: MaliciousTokensHolderAction -> LaunchpadConfig -> PubKeyHash -> PubKeyHash -> Run ()
@@ -142,7 +142,7 @@ spendHolderCreatePool action config@LaunchpadConfig {..} wallet signer = do
 createMockFactoryTx :: Tx
 createMockFactoryTx = mconcat [payToScript mockFactoryScript (InlineDatum ()) mempty]
 
-spendHolderCreatePoolTx :: MaliciousTokensHolderAction -> LaunchpadConfig -> UserSpend -> TxOutRef -> [TxBox (TypedValidator () PTHF.TokensHolderFinalRedeemer)] -> VestingDatum -> Value -> Value -> Value -> Value -> Value -> Value -> Value -> Tx
+spendHolderCreatePoolTx :: MaliciousTokensHolderAction -> LaunchpadConfig -> UserSpend -> TxOutRef -> [TxBox (TypedValidator Dex PTHF.TokensHolderFinalRedeemer)] -> VestingDatum -> Value -> Value -> Value -> Value -> Value -> Value -> Value -> Tx
 spendHolderCreatePoolTx action config@LaunchpadConfig {owner, daoFeeReceiver, wrPoolValidatorHash, projectToken, raisingToken} usp mockFactoryRef holderUtxos vestingDatum mintedValue poolValue poolToken poolShares vestingValue ownerValue daoFeeReceiverValue = do
   let holderUtxo = head holderUtxos
       otherHolderUtxo = holderUtxos !! 1
@@ -155,11 +155,11 @@ spendHolderCreatePoolTx action config@LaunchpadConfig {owner, daoFeeReceiver, wr
   mconcat
     [ userSpend usp
     , mintValue poolMintingPolicy () mintedValue
-    , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NoPool ()
+    , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NoPool Wr
     , spendScript mockFactoryScript mockFactoryRef () ()
     , case action of
-        DoubleSatisfy -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef otherHolderUtxo) PTHF.NoPool ()
-        _ -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NoPool ()
+        DoubleSatisfy -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef otherHolderUtxo) PTHF.NoPool Wr
+        _ -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NoPool Wr
     , payToScript vestingValidator (HashDatum vestingDatum) vestingValue
     , mintValue (poolMintingPolicy) () poolShares
     , payToScript (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash)) (InlineDatum (lpDatum projectToken raisingToken)) (poolValue <> poolToken <> poolShares)
@@ -212,13 +212,13 @@ spendHolderPoolExists action config@LaunchpadConfig {..} wallet signer = do
 
   submitTx wallet =<< signTx signer (spendHolderPoolExistsTx action config holderUtxo poolProofUtxo ownerValue daoFeeReceiverValue)
 
-spendHolderPoolExistsTx :: MaliciousTokensHolderAction -> LaunchpadConfig -> TxBox (TypedValidator () PTHF.TokensHolderFinalRedeemer) -> TxBox (TypedValidator PoolProofDatum ()) -> Value -> Value -> Tx
+spendHolderPoolExistsTx :: MaliciousTokensHolderAction -> LaunchpadConfig -> TxBox (TypedValidator Dex PTHF.TokensHolderFinalRedeemer) -> TxBox (TypedValidator PoolProofDatum ()) -> Value -> Value -> Tx
 spendHolderPoolExistsTx action config@LaunchpadConfig {owner, daoFeeReceiver} holderUtxo poolProofUtxo ownerValue daoFeeReceiverValue =
   mconcat
     [ case action of
         NoPoolProof -> payToKey owner mempty
         _ -> refInputHash (txBoxRef poolProofUtxo) (txBoxDatum poolProofUtxo)
-    , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.PoolExists ()
+    , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.PoolExists Wr
     , payToKey daoFeeReceiver daoFeeReceiverValue
     , payToKey owner ownerValue
     ]

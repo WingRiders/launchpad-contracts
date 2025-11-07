@@ -67,11 +67,11 @@ deriving via
       if usesWrV2 is true:
         2. The transaction has a PoolProof utxo with a PoolProof token in the reference inputs, the token name must be equal to the PoolProof validator hash
         3. The pool proof must have the same asset classes in the datum as the rewards utxo
-        4. The pool proof has WR dex field (== 0)
+        4. The pool proof has WR dex field
       if usesSundaeV3 is true:
         5. The transaction has a PoolProof utxo with a PoolProof token in the reference inputs, the token name must be equal to the PoolProof validator hash
         6. The pool proof must have the same asset classes in the datum as the rewards utxo
-        7. The pool proof has Sundae dex field (== 1)
+        7. The pool proof has Sundae dex field
 -}
 prewardsHolderValidator :: Term s PRewardsHolderConfig -> Term s PRewardsHolderDatum -> Term s PScriptContext -> Term s PBool
 prewardsHolderValidator cfg datum context = unTermCont do
@@ -89,14 +89,15 @@ prewardsHolderValidator cfg datum context = unTermCont do
                     poolProofDatum <-
                       pletFieldsC @'["projectSymbol", "projectToken", "raisingSymbol", "raisingToken", "dex"] $
                         pfromPDatum @PPoolProofDatum #$ ptryFromInlineDatum #$ ptxOutDatum # poolProof
-                    pure . pand'List $
-                      [ ptraceIfFalse "M1" $ ptxOutHasAssociatedToken cfgF.poolProofSymbol poolProof
-                      , ptraceIfFalse "M2" $ datumF.projectSymbol #== poolProofDatum.projectSymbol
-                      , ptraceIfFalse "M3" $ datumF.projectToken #== poolProofDatum.projectToken
-                      , ptraceIfFalse "M4" $ datumF.raisingSymbol #== poolProofDatum.raisingSymbol
-                      , ptraceIfFalse "M5" $ datumF.raisingToken #== poolProofDatum.raisingToken
-                      , ptraceIfFalse "M6" $ pfromData poolProofDatum.dex #== dex
-                      ]
+                    pure $
+                      pand'List
+                        [ ptraceIfFalse "M3" (ptxOutHasAssociatedToken cfgF.poolProofSymbol poolProof)
+                        , ptraceIfFalse "M4" $ datumF.projectSymbol #== poolProofDatum.projectSymbol
+                        , ptraceIfFalse "M5" $ datumF.projectToken #== poolProofDatum.projectToken
+                        , ptraceIfFalse "M6" $ datumF.raisingSymbol #== poolProofDatum.raisingSymbol
+                        , ptraceIfFalse "M7" $ datumF.raisingToken #== poolProofDatum.raisingToken
+                        , ptraceIfFalse "M8" $ poolProofDatum.dex #== dex
+                        ]
             )
           # tx.referenceInputs
 
@@ -108,10 +109,8 @@ prewardsHolderValidator cfg datum context = unTermCont do
   pure $
     pand'List
       [ ptraceIfFalse "M1" signedByOwner
-      , --  0 represents WingRiders V2
-        pif cfgF.usesWr (hasCorrectPoolProof 0) ptrue
-      , -- 1 represents SundaeSwap V3
-        pif cfgF.usesSundae (hasCorrectPoolProof 1) ptrue
+      , pif cfgF.usesWr (hasCorrectPoolProof (pcon PWr)) ptrue
+      , pif cfgF.usesSundae (hasCorrectPoolProof (pcon PSundae)) ptrue
       ]
 
 rewardsHolderValidator :: Term s (PRewardsHolderConfig :--> PValidator)

@@ -5,6 +5,7 @@ import Data.Functor (void)
 import Integration.Launchpad.Validators
 import Integration.Mock (LaunchpadConfig (LaunchpadConfig, projectToken, raisingToken), rewardsHolderOilAdaAmount)
 import Launchpad.Types (
+  Dex (..),
   NodeKey,
   PoolProofDatum (PoolProofDatum),
   RewardsHolderDatum (..),
@@ -83,7 +84,7 @@ spendRewardsHolderTx action config@LaunchpadConfig {projectToken, raisingToken} 
             _ -> refInputHash poolProofUtxo poolProofDatum
          ]
   where
-    poolProofDatum = PoolProofDatum projectCs projectTn raisingCs raisingTn 0
+    poolProofDatum = PoolProofDatum projectCs projectTn raisingCs raisingTn Wr
     AssetClass (projectCs, projectTn) = projectToken
     AssetClass (raisingCs, raisingTn) = raisingToken
     rewardValue = foldl' (\acc txBox -> (acc <> txBoxValue txBox)) mempty holderBoxes

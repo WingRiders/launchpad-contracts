@@ -410,6 +410,7 @@ pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
   - at least "emergencyWithdrawalPeriod" amount of time has passed since the withdrawalEndTime
   - the transaction is signed by the commit fold owner
 
+  TODO: adjust the docs for 2 dexes
   Rewards fold:
   - the amount of burned node tokens is equal to the number of nodes in the inputs
   - there is a R 0,i rewards fold utxo in the inputs, its validator is run
@@ -425,7 +426,7 @@ pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
     - the ADA value of R 0,i plus 2 ADA per processed node must be sent the commitFoldOwner address
     - the rewards fold token must be burned
     - the address of T' must be the final WingRiders version (ProjectTokensHolderFinal)
-    - the datum of T' must be equal to unit
+    - the datum of T' must be equal to WrTokensHolder
   - for every input node, there is a corresponding user reward utxo when node.committed /= 0
     - if the node.createdTime > just value of the cutoffTime
       OR the node.createdTime == cutoffTime but the node.key > cutoffKey
@@ -709,7 +710,7 @@ pcheckLastRewardsFold
                   pand'List
                     [ ptraceIfFalse "L30" $
                         (ptryFromInlineDatum # outWr.datum)
-                          #== pcon (PDatum (pforgetData (pconstantData ())))
+                          #== pcon (PDatum (pforgetData (pdata (pcon PWr))))
                     , ptraceIfFalse "L31" $ phaveSameStakingCredentials # projectTokensHolderInputAddress # outWr.address
                     , ptraceIfFalse "L32" $ wrCommittedExpected #== outWrCommitted
                     , ptraceIfFalse "L33" $ wrProjectExpected #== outWrProject
@@ -751,7 +752,7 @@ pcheckLastRewardsFold
                 pure $
                   pand'List
                     [ (ptryFromInlineDatum # outSundae.datum)
-                        #== pcon (PDatum (pforgetData (pconstantData ())))
+                        #== pcon (PDatum (pforgetData (pdata (pcon PSundae))))
                     , phaveSameStakingCredentials # projectTokensHolderInputAddress # outSundae.address
                     , sundaeCommittedExpected #== outSundaeCommitted
                     , sundaeProjectExpected #== outSundaeProject

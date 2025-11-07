@@ -15,7 +15,7 @@ import Data.ByteString.Hash (blake2b_256)
 import Data.Text.Encoding (encodeUtf8)
 import Launchpad.Constants qualified as C
 import Launchpad.PoolTypes
-import Launchpad.Types (PPoolProofDatum)
+import Launchpad.Types (PDex, PPoolProofDatum)
 import Launchpad.Util (pisCorrectPool)
 import Other.Vesting (PVestingDatum (..))
 import Plutarch
@@ -218,8 +218,13 @@ instance PTryFrom PData (PAsData PTokensHolderFinalRedeemer)
         DAO wallet utxo holds at most 3 unique tokens, ADA project token, raised token
         there are two script inputs
 -}
-projectTokensHolderValidatorTyped :: Term s PTokensHolderFinalConfig -> Term s PTokensHolderFinalRedeemer -> Term s PScriptContext -> Term s PUnit
-projectTokensHolderValidatorTyped cfg redeemer context = unTermCont do
+projectTokensHolderValidatorTyped ::
+  Term s PTokensHolderFinalConfig ->
+  Term s PDex ->
+  Term s PTokensHolderFinalRedeemer ->
+  Term s PScriptContext ->
+  Term s PUnit
+projectTokensHolderValidatorTyped cfg _datum redeemer context = unTermCont do
   ctxF <- pletFieldsC @'["txInfo", "purpose"] context
   infoF <- pletFieldsC @'["inputs", "outputs", "signatories", "mint", "datums", "referenceInputs"] ctxF.txInfo
   mint <- pletC infoF.mint
@@ -508,10 +513,10 @@ pvalidateNoPool
         ]
 
 projectTokensHolderValidator :: Term s (PTokensHolderFinalConfig :--> PValidator)
-projectTokensHolderValidator = plam $ \cfg _dat redm' context -> unTermCont do
-  (_dat, _) <- ptryFromC @(PAsData PUnit) _dat
+projectTokensHolderValidator = plam $ \cfg dat' redm' context -> unTermCont do
+  (dat, _) <- ptryFromC @(PAsData PDex) dat'
   (redm, _) <- ptryFromC @(PAsData PTokensHolderFinalRedeemer) redm'
-  pure $ popaque $ projectTokensHolderValidatorTyped cfg (pfromData redm) context
+  pure $ popaque $ projectTokensHolderValidatorTyped cfg (pfromData dat) (pfromData redm) context
 
 projectTokensHolderScriptValidator :: TokensHolderFinalConfig -> Script
 projectTokensHolderScriptValidator cfg = toScript (projectTokensHolderValidator # pconstant cfg)

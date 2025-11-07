@@ -63,10 +63,6 @@ deriving via
   instance
     (PConstantDecl PoolProofPolicyConfig)
 
--- 0 is WingRidersV2
--- 1 is SundaeSwapV3
-type PDex = PInteger
-
 {- | This validates minting of a PoolProof token and creation of PoolProof.
      In order to transaction be valid:
       1. There is a WR V2 pool utxo with the pool validity token in the reference inputs if passed redeemer is 0.
@@ -101,7 +97,7 @@ pvalidatePoolProofMinting cfg dex context = unTermCont do
   let isCorrectPool =
         pcond
           [
-            ( dex #== 0
+            ( dex #== pcon PWr
             , unTermCont do
                 let poolRefInput =
                       passertSingleSpecificInput "D2wr"
@@ -125,7 +121,7 @@ pvalidatePoolProofMinting cfg dex context = unTermCont do
                     (poolDatum.assetBSymbol, poolDatum.assetBToken)
             )
           ,
-            ( dex #== 1
+            ( dex #== pcon PSundae
             , unTermCont do
                 let poolRefInput =
                       ptxInInfoResolved
@@ -171,7 +167,7 @@ pvalidatePoolProofMinting cfg dex context = unTermCont do
                     ]
             )
           ]
-          -- dex must be either 1 (Wr) or 2 (Sundae)
+          -- dex must be either Wr or Sundae
           (ptraceError "D2")
 
   pure $
@@ -179,7 +175,7 @@ pvalidatePoolProofMinting cfg dex context = unTermCont do
       [ ptraceIfFalse "D3" (poolProofMinted #== 1)
       , ptraceIfFalse "D4" (pcountOfUniqueTokens # poolProofOut.value #== 2)
       , ptraceIfFalse "D5" isCorrectPool
-      , ptraceIfFalse "D6" (pfromData datumF.dex #== dex)
+      , ptraceIfFalse "D6" (datumF.dex #== dex)
       ]
 
 ppoolProofMintingPolicy :: Term s (PPoolProofPolicyConfig :--> PMintingPolicy)

@@ -14,6 +14,24 @@ import Plutarch.Util ()
 import PlutusLedgerApi.V2
 import PlutusTx qualified
 
+data Dex = Wr | Sundae
+  deriving stock (Show, Eq, Ord, Generic, Enum, Bounded)
+  deriving
+    (PlutusTx.ToData, PlutusTx.FromData, PlutusTx.UnsafeFromData)
+    via (EnumIsData Dex)
+
+-- TODO: does that work as expected for enums?
+PlutusTx.makeLift ''Dex
+
+data PDex (s :: S) = PWr | PSundae
+  deriving stock (Generic, Enum, Bounded)
+  deriving anyclass (PlutusType, PIsData, PShow, PEq)
+
+instance DerivePlutusType PDex where
+  type DPTStrat _ = PlutusTypeEnumData
+
+instance PTryFrom PData (PAsData PDex)
+
 -- ScriptHash of the Node Validator
 type LaunchpadTokensHolderDatum = ScriptHash
 
@@ -518,9 +536,7 @@ data PoolProofDatum = PoolProofDatum
   , projectToken :: TokenName
   , raisingSymbol :: CurrencySymbol
   , raisingToken :: TokenName
-  , -- 0 is WingRidersV2
-    -- 1 is SundaeSwapV3
-    dex :: Integer
+  , dex :: Dex
   }
   deriving (Show, Eq, Ord, Generic)
 
@@ -536,7 +552,7 @@ data PPoolProofDatum (s :: S)
               , "projectToken" ':= PTokenName
               , "raisingSymbol" ':= PCurrencySymbol
               , "raisingToken" ':= PTokenName
-              , "dex" ':= PInteger
+              , "dex" ':= PDex
               ]
           )
       )

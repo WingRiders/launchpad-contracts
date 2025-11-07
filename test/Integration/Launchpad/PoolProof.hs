@@ -5,7 +5,7 @@ import Integration.Launchpad.Validators
 import Integration.Mock
 import Launchpad.Constants qualified as C
 import Launchpad.PoolTypes
-import Launchpad.Types (PoolProofDatum (..))
+import Launchpad.Types (Dex (..), PoolProofDatum (..))
 import Plutarch.Extra.ScriptContext (scriptHashToTokenName)
 import Plutus.Model
 import Plutus.Util (adaAssetClass)
@@ -125,7 +125,7 @@ createPoolProofTx action config poolWrRef =
           )
           (scriptHashToTokenName (toValidatorHash (poolProofValidator config)))
           1
-    poolProofDatum = PoolProofDatum projectSymbol projectToken raisingSymbol raisingToken 0
+    poolProofDatum = PoolProofDatum projectSymbol projectToken raisingSymbol raisingToken Wr
     AssetClass (projectSymbol, projectToken) = config.projectToken
     AssetClass (raisingSymbol, raisingToken) = config.raisingToken
 

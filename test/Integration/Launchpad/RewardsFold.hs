@@ -380,7 +380,7 @@ rewardsFoldOverTx
                   then
                     payToScript
                       (appendStakingCredential mockStakingCredential (projectTokensHolderFinalValidator config))
-                      (InlineDatum ())
+                      (InlineDatum Wr)
                       ( txOutValue firstTokensHolderOut
                           <> assetClassValue config.raisingToken collectedCommitted
                           <> memptyIfZero (singleton projectSymbol projectToken (-distributedRewards))
@@ -392,7 +392,7 @@ rewardsFoldOverTx
                   else
                     payToScript
                       (projectTokensHolderFinalValidator config)
-                      (InlineDatum ())
+                      (InlineDatum Wr)
                       ( txOutValue firstTokensHolderOut
                           <> assetClassValue config.raisingToken collectedCommitted
                           <> memptyIfZero (singleton projectSymbol projectToken (-distributedRewards))
