@@ -15,7 +15,7 @@ import Data.ByteString.Hash (blake2b_256)
 import Data.Text.Encoding (encodeUtf8)
 import Launchpad.Constants qualified as C
 import Launchpad.PoolTypes
-import Launchpad.Types (PDex, PPoolProofDatum)
+import Launchpad.Types
 import Launchpad.Util (pisCorrectPool)
 import Other.Vesting (PVestingDatum (..))
 import Plutarch
@@ -136,13 +136,13 @@ shareTokenName = blake2b (blake2b poolType <> blake2b aScale <> blake2b bScale <
 Note that we don't support stableswap pools in the launchpad,
 hence the pool type and the scales are statically known
 -}
-pshareTokenName ::
+pwrShareTokenName ::
   Term s PCurrencySymbol ->
   Term s PTokenName ->
   Term s PCurrencySymbol ->
   Term s PTokenName ->
   Term s PTokenName
-pshareTokenName raisingSymbol raisingToken projectSymbol projectToken =
+pwrShareTokenName raisingSymbol raisingToken projectSymbol projectToken =
   let assetRaisingHash = pblake2b_256 # (pto raisingSymbol <> pto raisingToken)
       assetProjectHash = pblake2b_256 # (pto projectSymbol <> pto projectToken)
       assetsHash =
@@ -223,18 +223,22 @@ projectTokensHolderValidatorTyped ::
   Term s PDex ->
   Term s PTokensHolderFinalRedeemer ->
   Term s PScriptContext ->
-  Term s PUnit
-projectTokensHolderValidatorTyped cfg _datum redeemer context = unTermCont do
+  Term s PBool
+projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
   ctxF <- pletFieldsC @'["txInfo", "purpose"] context
   infoF <- pletFieldsC @'["inputs", "outputs", "signatories", "mint", "datums", "referenceInputs"] ctxF.txInfo
+
   mint <- pletC infoF.mint
   txOutputs <- pletC infoF.outputs
   txInputs <- pletC infoF.inputs
   txRefInputs <- pletC infoF.referenceInputs
   PSpending ownRef <- pmatchC ctxF.purpose
+
   let ownInput = pgetInput # txInputs # (pfield @"_0" # ownRef)
+
   ownInputF <- pletFieldsC @["address", "value"] ownInput
   ownInputValue <- pletC ownInputF.value
+
   cfgF <-
     pletFieldsC
       @'[ "owner"
@@ -258,12 +262,11 @@ projectTokensHolderValidatorTyped cfg _datum redeemer context = unTermCont do
         , "projectToken"
         ]
       cfg
+
   raisingCs <- pletC cfgF.raisingSymbol
   raisingTn <- pletC cfgF.raisingToken
   projectCs <- pletC cfgF.projectSymbol
   projectTn <- pletC cfgF.projectToken
-  poolCs <- pletC cfgF.poolSymbol
-  plpShareTn <- pletC $ pshareTokenName raisingCs raisingTn projectCs projectTn
 
   numRaised <-
     pletC $
@@ -272,26 +275,28 @@ projectTokensHolderValidatorTyped cfg _datum redeemer context = unTermCont do
         (pvalueOf # ownInputValue # raisingCs # raisingTn - cfgF.collateral)
         (pvalueOf # ownInputValue # raisingCs # raisingTn)
 
-  pure
-    $ perrorIfFalse
-      #$ ptraceIfFalse "J0"
-    $ pand'List
+  pure $
+    pand'List
       [ pmatch redeemer \case
           PNoPool ->
-            pvalidateNoPool
-              cfgF.owner
-              cfgF.factoryValidatorHash
-              (cfgF.daoFeeReceiver, cfgF.daoFeeUnits, cfgF.daoFeeBase)
-              (cfgF.vestingValidatorHash, cfgF.vestingPeriodInstallments, cfgF.vestingPeriodDuration, cfgF.vestingPeriodDurationToFirstUnlock, cfgF.vestingPeriodStart)
-              (poolCs, cfgF.poolValidatorHash, plpShareTn)
-              (projectCs, projectTn)
-              (raisingCs, raisingTn)
-              (numRaised, cfgF.raisedTokensPoolPartPercentage, cfgF.collateral)
-              ownInputValue
-              txInputs
-              txOutputs
-              infoF.datums
-              mint
+            pif
+              (datum #== pcon PWr)
+              ( pvalidateNoWrPool
+                  cfgF.owner
+                  cfgF.factoryValidatorHash
+                  (cfgF.daoFeeReceiver, cfgF.daoFeeUnits, cfgF.daoFeeBase)
+                  (cfgF.vestingValidatorHash, cfgF.vestingPeriodInstallments, cfgF.vestingPeriodDuration, cfgF.vestingPeriodDurationToFirstUnlock, cfgF.vestingPeriodStart)
+                  (cfgF.poolSymbol, cfgF.poolValidatorHash)
+                  (projectCs, projectTn)
+                  (raisingCs, raisingTn)
+                  (numRaised, cfgF.raisedTokensPoolPartPercentage, cfgF.collateral)
+                  ownInputValue
+                  txInputs
+                  txOutputs
+                  infoF.datums
+                  mint
+              )
+              pvalidateNoSundaePool
           PPoolExists ->
             pvalidatePoolExists
               cfgF.owner
@@ -304,7 +309,10 @@ projectTokensHolderValidatorTyped cfg _datum redeemer context = unTermCont do
               txInputs
               txOutputs
               txRefInputs
+              datum
       ]
+
+pvalidateNoSundaePool = undefined
 
 pvalidatePoolExists ::
   Term s PAddress ->
@@ -317,6 +325,7 @@ pvalidatePoolExists ::
   Term s (PBuiltinList PTxInInfo) ->
   Term s (PBuiltinList PTxOut) ->
   Term s (PBuiltinList PTxInInfo) ->
+  Term s PDex ->
   Term s PBool
 pvalidatePoolExists
   owner
@@ -328,16 +337,17 @@ pvalidatePoolExists
   ownInputValue
   txInputs
   txOutputs
-  txRefInputs = unTermCont do
+  txRefInputs
+  dex = unTermCont do
     let poolProofTxIn =
           passertSingleton "one pool proof"
             #$ pfilter
             # plam
-              (\o -> (ppaysToCredential # poolProofValidatorHash # (ptxInInfoResolved # o)))
+              (\o -> ppaysToCredential # poolProofValidatorHash # (ptxInInfoResolved # o))
             # txRefInputs
         poolProofOut = pfromData (ptxInInfoResolved # poolProofTxIn)
         poolProofDatum = pfromPDatum @PPoolProofDatum # (ptryFromInlineDatum #$ pfield @"datum" # poolProofOut)
-    poolProofFields <- pletFieldsC @'["projectSymbol", "projectToken", "raisingSymbol", "raisingToken"] poolProofDatum
+    poolProofFields <- pletFieldsC @'["projectSymbol", "projectToken", "raisingSymbol", "raisingToken", "dex"] poolProofDatum
     owedToDao <- pletC (pdiv # (daoFeeUnits * numRaised) # daoFeeBase)
     projectTokens <- pletC (pvalueOf # ownInputValue # projectCs # projectTn)
     raisedToDao <- pletC ((pdiv # ((numRaised - owedToDao) * raisedTokensPoolPartPercentage) # 100) + owedToDao)
@@ -350,6 +360,10 @@ pvalidatePoolExists
         , poolProofFields.projectToken #== projectTn
         , poolProofFields.raisingSymbol #== raisingCs
         , poolProofFields.raisingToken #== raisingTn
+        , -- NOTE: we can and must always create a Sundae pool if it's used
+          --       that means the pool exists path is only ever valid for Wr
+          poolProofFields.dex #== pcon PWr
+        , dex #== pcon PWr
         , pany
             # plam
               ( \txOut -> unTermCont do
@@ -386,12 +400,12 @@ pvalidatePoolExists
             # txOutputs
         ]
 
-pvalidateNoPool ::
+pvalidateNoWrPool ::
   Term s PAddress ->
   Term s PScriptHash ->
   (Term s PAddress, Term s PInteger, Term s PInteger) ->
   (Term s PScriptHash, Term s PInteger, Term s PPOSIXTime, Term s PPOSIXTime, Term s PPOSIXTime) ->
-  (Term s PCurrencySymbol, Term s PScriptHash, Term s PTokenName) ->
+  (Term s PCurrencySymbol, Term s PScriptHash) ->
   (Term s PCurrencySymbol, Term s PTokenName) ->
   (Term s PCurrencySymbol, Term s PTokenName) ->
   (Term s PInteger, Term s PInteger, Term s PInteger) ->
@@ -401,12 +415,12 @@ pvalidateNoPool ::
   Term s (PMap 'Unsorted PDatumHash PDatum) ->
   Term s (PValue 'Sorted 'NoGuarantees) ->
   Term s PBool
-pvalidateNoPool
+pvalidateNoWrPool
   owner
   factoryValidatorHash
   (daoFeeReceiver, daoFeeUnits, daoFeeBase)
   (vestingValidatorHash, vestingPeriodInstallments, vestingPeriodDuration, vestingPeriodDurationToFirstUnlock, vestingPeriodStartTime)
-  (poolCs, poolValidatorHash, plpShareTn)
+  (poolCs', poolValidatorHash)
   (projectCs, projectTn)
   (raisingCs, raisingTn)
   (numRaised, raisedTokensPoolPartPercentage, returnedCollateral)
@@ -418,6 +432,9 @@ pvalidateNoPool
     owedToDao <- pletC $ pdiv # (daoFeeUnits * numRaised) # daoFeeBase
     owedToPool <- pletC $ pdiv # ((numRaised - owedToDao) * raisedTokensPoolPartPercentage) # 100
     owedToOwner <- pletC $ numRaised - owedToDao - owedToPool
+
+    plpShareTn <- pletC $ pwrShareTokenName raisingCs raisingTn projectCs projectTn
+    poolCs <- pletC poolCs'
 
     let mintedShares = pvalueOf # mint # poolCs # plpShareTn
         poolUTxO =
@@ -473,7 +490,7 @@ pvalidateNoPool
         vestingDatum
     pure $
       pand'List
-        [ -- The factory and the project tokens holder
+        [ -- The factory and the tokens holder
           pcountAllScriptInputs # txInputs #== 2
         , pcountScriptInputs # factoryValidatorHash # txInputs #== 1
         , pany
@@ -516,7 +533,7 @@ projectTokensHolderValidator :: Term s (PTokensHolderFinalConfig :--> PValidator
 projectTokensHolderValidator = plam $ \cfg dat' redm' context -> unTermCont do
   (dat, _) <- ptryFromC @(PAsData PDex) dat'
   (redm, _) <- ptryFromC @(PAsData PTokensHolderFinalRedeemer) redm'
-  pure $ popaque $ projectTokensHolderValidatorTyped cfg (pfromData dat) (pfromData redm) context
+  pure . popaque $ perrorIfFalse #$ projectTokensHolderValidatorTyped cfg (pfromData dat) (pfromData redm) context
 
 projectTokensHolderScriptValidator :: TokensHolderFinalConfig -> Script
 projectTokensHolderScriptValidator cfg = toScript (projectTokensHolderValidator # pconstant cfg)
