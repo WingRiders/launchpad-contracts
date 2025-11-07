@@ -143,15 +143,12 @@ Note that we don't support stableswap pools in the launchpad,
 hence the pool type and the scales are statically known
 -}
 pshareTokenName ::
-  Term
-    s
-    ( PCurrencySymbol
-        :--> PTokenName
-        :--> PCurrencySymbol
-        :--> PTokenName
-        :--> PTokenName
-    )
-pshareTokenName = plam \raisingSymbol raisingToken projectSymbol projectToken ->
+  Term s PCurrencySymbol ->
+  Term s PTokenName ->
+  Term s PCurrencySymbol ->
+  Term s PTokenName ->
+  Term s PTokenName
+pshareTokenName raisingSymbol raisingToken projectSymbol projectToken =
   let assetRaisingHash = pblake2b_256 # (pto raisingSymbol <> pto raisingToken)
       assetProjectHash = pblake2b_256 # (pto projectSymbol <> pto projectToken)
       assetsHash =
@@ -169,9 +166,9 @@ pshareTokenName = plam \raisingSymbol raisingToken projectSymbol projectToken ->
     bScaleHash = blake2b_256 $ encodeUtf8 "1"
     staticPart = poolTypeIdHash <> aScaleHash <> bScaleHash
 
-ppaysAtleastToAddress :: Term s (PCurrencySymbol :--> PTokenName :--> PInteger :--> PAddress :--> PTxOut :--> PBool)
-ppaysAtleastToAddress = phoistAcyclic $
-  plam \symbol token amount address out -> pletFields @["address", "value"] out \outF ->
+ppaysAtleastToAddress :: Term s PCurrencySymbol -> Term s PTokenName -> Term s PInteger -> Term s PAddress -> Term s (PTxOut :--> PBool)
+ppaysAtleastToAddress symbol token amount address =
+  plam \out -> pletFields @["address", "value"] out \outF ->
     (outF.address #== address)
       #&& pand'List
         [ pvalueOf # outF.value # symbol # token #>= amount
@@ -228,8 +225,8 @@ instance PTryFrom PData (PAsData PTokenHolderRedeemerFinal)
         there are two script inputs
 -}
 projectTokensHolderValidatorTyped ::
-  Term s (PTokensHolderFinalConfig :--> PTokenHolderRedeemerFinal :--> PScriptContext :--> PUnit)
-projectTokensHolderValidatorTyped = phoistAcyclic $ plam \cfg redeemer context -> unTermCont do
+  Term s PTokensHolderFinalConfig -> Term s PTokenHolderRedeemerFinal -> Term s PScriptContext -> Term s PUnit
+projectTokensHolderValidatorTyped cfg redeemer context = unTermCont do
   ctxF <- pletFieldsC @'["txInfo", "purpose"] context
   infoF <- pletFieldsC @'["inputs", "outputs", "signatories", "mint", "datums", "referenceInputs"] ctxF.txInfo
   mint <- pletC infoF.mint
@@ -270,7 +267,7 @@ projectTokensHolderValidatorTyped = phoistAcyclic $ plam \cfg redeemer context -
   projectCs <- pletC cfgF.projectSymbol
   projectTn <- pletC cfgF.projectToken
   poolCs <- pletC cfgF.poolSymbol
-  plpShareTn <- pletC $ pshareTokenName # raisingCs # raisingTn # projectCs # projectTn
+  plpShareTn <- pletC $ pshareTokenName raisingCs raisingTn projectCs projectTn
 
   numRaised <-
     pletC $
@@ -484,7 +481,7 @@ pvalidateNoPool
           pcountAllScriptInputs # txInputs #== 2
         , pcountScriptInputs # factoryValidatorHash # txInputs #== 1
         , pany
-            # (ppaysAtleastToAddress # raisingCs # raisingTn # owedToDao # daoFeeReceiver)
+            # (ppaysAtleastToAddress raisingCs raisingTn owedToDao daoFeeReceiver)
             # txOutputs
         , pany
             # plam
@@ -520,10 +517,10 @@ pvalidateNoPool
         ]
 
 projectTokensHolderValidator :: Term s (PTokensHolderFinalConfig :--> PValidator)
-projectTokensHolderValidator = phoistAcyclic $ plam $ \cfg _dat redm' context -> unTermCont do
+projectTokensHolderValidator = plam $ \cfg _dat redm' context -> unTermCont do
   (_dat, _) <- ptryFromC @(PAsData PUnit) _dat
   (redm, _) <- ptryFromC @(PAsData PTokenHolderRedeemerFinal) redm'
-  pure $ popaque $ projectTokensHolderValidatorTyped # cfg # pfromData redm # context
+  pure $ popaque $ projectTokensHolderValidatorTyped cfg (pfromData redm) context
 
 projectTokensHolderScriptValidator :: TokensHolderFinalConfig -> Script
 projectTokensHolderScriptValidator cfg = toScript (projectTokensHolderValidator # pconstant cfg)
