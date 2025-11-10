@@ -148,10 +148,6 @@ pvalidatePoolProofMinting cfg dex context = unTermCont do
                 let assetBSymbol = pfromData assetB.currencySymbol
                 let assetBToken = pfromData assetB.tokenName
 
-                -- https://github.com/SundaeSwap-finance/sundae-contracts/blob/be33466b7dbe0f8e6c0e0f46ff23737897f45835/lib/shared.ak#L222
-                -- TODO: check if it looks the same onchain
-                let poolNftName identifier = pcon . PTokenName $ (pconstant @PByteString "000de140") <> identifier
-
                 pure $
                   pand'List
                     [ pisCorrectPool
@@ -162,7 +158,7 @@ pvalidatePoolProofMinting cfg dex context = unTermCont do
                     , pvalueOf
                         # pool.value
                         # (pcon . PCurrencySymbol . pto . pfromData $ cfgF.sundaePoolScriptHash)
-                        # poolNftName poolDatum.identifier
+                        # poolSundaeNftName poolDatum.identifier
                         #== 1
                     ]
             )

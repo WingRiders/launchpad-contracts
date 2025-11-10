@@ -217,7 +217,7 @@ spendHolderPoolExistsTx action config@LaunchpadConfig {owner, daoFeeReceiver} ho
   mconcat
     [ case action of
         NoPoolProof -> payToKey owner mempty
-        _ -> refInputHash (txBoxRef poolProofUtxo) (txBoxDatum poolProofUtxo)
+        _ -> refInputHash (txBoxRef poolProofUtxo) (txBoxDatum poolProofUtxo) -- TODO: doesn't that work?
     , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.PoolExists Wr
     , payToKey daoFeeReceiver daoFeeReceiverValue
     , payToKey owner ownerValue

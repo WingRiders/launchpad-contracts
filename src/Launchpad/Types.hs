@@ -20,9 +20,6 @@ data Dex = Wr | Sundae
     (PlutusTx.ToData, PlutusTx.FromData, PlutusTx.UnsafeFromData)
     via (EnumIsData Dex)
 
--- TODO: does that work as expected for enums?
-PlutusTx.makeLift ''Dex
-
 data PDex (s :: S) = PWr | PSundae
   deriving stock (Generic, Enum, Bounded)
   deriving anyclass (PlutusType, PIsData, PShow, PEq)
@@ -541,7 +538,6 @@ data PoolProofDatum = PoolProofDatum
   deriving (Show, Eq, Ord, Generic)
 
 PlutusTx.makeIsDataIndexed ''PoolProofDatum [('PoolProofDatum, 0)]
-PlutusTx.makeLift ''PoolProofDatum
 
 data PPoolProofDatum (s :: S)
   = PPoolProofDatum
