@@ -16,7 +16,7 @@ import Data.Text.Encoding (encodeUtf8)
 import Launchpad.Constants qualified as C
 import Launchpad.PoolTypes
 import Launchpad.Types
-import Launchpad.Util (pisCorrectPool, poolSundaeLpName, poolSundaeNftName)
+import Launchpad.Util (poolSundaeLpName, poolSundaeNftName)
 import Other.Vesting (PVestingDatum (..))
 import Plutarch
 import Plutarch.Api.V1.Value (padaSymbol, padaToken, pvalueOf)
@@ -622,18 +622,7 @@ pvalidateNormalFlowWr
             # 1
             # txOutputs
 
-    poolOutputF <- pletFieldsC @["address", "datum", "value"] poolUTxO
-
-    let poolDatum = pfromPDatum @PWrPoolConstantProductDatum #$ ptryFromInlineDatum # poolOutputF.datum
-
-    poolDatumF <- pletFieldsC @'["assetASymbol", "assetAToken", "assetBSymbol", "assetBToken"] poolDatum
-
-    let correctPool =
-          pisCorrectPool
-            (projectCs, projectTn)
-            (raisingCs, raisingTn)
-            (poolDatumF.assetASymbol, poolDatumF.assetAToken)
-            (poolDatumF.assetBSymbol, poolDatumF.assetBToken)
+    poolOutputF <- pletFieldsC @["address", "value"] poolUTxO
 
     let poolShareTokens =
           pvalueOf
@@ -701,7 +690,6 @@ pvalidateNormalFlowWr
           pvalueOf # poolOutputF.value # projectCs # projectTn #== pvalueOf # ownInputValue # projectCs # projectTn
         , -- The pool receives the raising tokens, ensures the pool assets are correct as the factory checks token count
           pvalueOf # poolOutputF.value # raisingCs # raisingTn #== owedToPool
-        , correctPool -- TODO: delete
         , -- The pool staking part is set to nothing
           pdnothing #== pfield @"stakingCredential" # poolOutputF.address
         , -- The vesting has correct datum
