@@ -101,3 +101,7 @@ poolOilAda = 3_000_000
 
 settingsNftName :: TokenName
 settingsNftName = "settings"
+
+-- | Used for bps calculations
+bpsScalingFactor :: Num a => a
+bpsScalingFactor = 10_000

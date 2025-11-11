@@ -260,9 +260,15 @@ rewardsFoldConfig lCfg =
     , presaleTierCs = lCfg.presaleTierCs
     , tokensToDistribute = lCfg.tokensToDistribute
     , withdrawalEndTime = lCfg.withdrawalEndTime
-    , rewardsHolderOilAda = lCfg.rewardsHolderOilAda
+    , oilAda = lCfg.rewardsHolderOilAda
     , commitFoldFeeAda = lCfg.commitFoldFeeAda
     , splitBps = 10_000
+    , owner = lCfg.owner
+    , daoFeeUnits = lCfg.daoFeeUnits
+    , daoFeeBase = lCfg.daoFeeBase
+    , daoFeeReceiver = lCfg.daoFeeReceiver
+    , collateral = lCfg.collateral
+    , raisedTokensPoolPartPercentage = lCfg.raisedTokensPoolPartPercentage
     }
 
 rewardsFoldPolicyConfig :: LaunchpadConfig -> R.RewardsFoldPolicyConfig
@@ -297,9 +303,6 @@ finalTokensHolderConfig lCfg =
   PTHF.TokensHolderFinalConfig
     { starter = lCfg.starter
     , owner = lCfg.owner
-    , daoFeeUnits = lCfg.daoFeeUnits
-    , daoFeeBase = lCfg.daoFeeBase
-    , raisedTokensPoolPartPercentage = lCfg.raisedTokensPoolPartPercentage
     , wrPoolSymbol = lCfg.wrPoolCurrencySymbol
     , wrPoolValidatorHash = lCfg.wrPoolValidatorHash
     , wrFactoryValidatorHash = lCfg.wrFactoryValidatorHash
@@ -317,7 +320,6 @@ finalTokensHolderConfig lCfg =
     , projectSymbol = fst (unAssetClass lCfg.projectToken)
     , projectToken = snd (unAssetClass lCfg.projectToken)
     , poolProofValidatorHash = poolProofScriptValidatorHash (poolProofConfig lCfg)
-    , collateral = lCfg.collateral
     }
 
 poolProofPolicyConfig :: LaunchpadConfig -> PoolProofPolicyConfig
