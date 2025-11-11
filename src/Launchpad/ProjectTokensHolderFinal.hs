@@ -25,7 +25,7 @@ import Plutarch.Bool
 import Plutarch.Crypto (pblake2b_256)
 import Plutarch.DataRepr
 import Plutarch.Extra.IsData (EnumIsData (..), PlutusTypeEnumData)
-import Plutarch.Extra.ScriptContext (pfromPDatum, ptryFromDatumHash, ptryFromInlineDatum)
+import Plutarch.Extra.ScriptContext (pfromPDatum, ptryFromInlineDatum)
 import Plutarch.Extra.TermCont
 import Plutarch.Lift
 import Plutarch.PlutusScript
@@ -44,7 +44,6 @@ import Plutarch.Util (
   pisAda,
   ppaysToCredential,
   ptryFindOutputWithAsset,
-  ptryLookup,
   ptxInInfoResolved,
   (#>),
   (#>=),
@@ -234,7 +233,7 @@ projectTokensHolderValidatorTyped ::
   Term s PBool
 projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
   ctxF <- pletFieldsC @'["txInfo", "purpose"] context
-  infoF <- pletFieldsC @'["inputs", "outputs", "signatories", "mint", "datums", "referenceInputs"] ctxF.txInfo
+  infoF <- pletFieldsC @'["inputs", "outputs", "signatories", "mint", "referenceInputs"] ctxF.txInfo
 
   mint <- pletC infoF.mint
   txOutputs <- pletC infoF.outputs
@@ -304,7 +303,6 @@ projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
                   ownInputValue
                   txInputs
                   txOutputs
-                  infoF.datums
                   mint
               )
               ( pvalidateNormalFlowSundae
@@ -321,7 +319,6 @@ projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
                   txInputs
                   txRefInputs
                   txOutputs
-                  infoF.datums
                   mint
               )
           PFailedFlow ->
@@ -353,7 +350,6 @@ pvalidateNormalFlowSundae ::
   Term s (PBuiltinList PTxInInfo) ->
   Term s (PBuiltinList PTxInInfo) ->
   Term s (PBuiltinList PTxOut) ->
-  Term s (PMap any PDatumHash PDatum) ->
   Term s (PValue 'Sorted 'NoGuarantees) ->
   Term s PBool
 pvalidateNormalFlowSundae
@@ -370,7 +366,6 @@ pvalidateNormalFlowSundae
   txInputs
   txReferenceInputs
   txOutputs
-  datums
   mint = unTermCont do
     owedToDao <- pletC $ pdiv # (daoFeeUnits * numRaised) # daoFeeBase
     owedToPool <- pletC $ pdiv # ((numRaised - owedToDao) * raisedTokensPoolPartPercentage) # 100
@@ -407,9 +402,7 @@ pvalidateNormalFlowSundae
             # userGivenShares
             # txOutputs
     vesting <- pletFieldsC @["datum", "value"] vestingOutput
-    -- TODO: inline always?
-    let vestingDatum = pfromPDatum @PVestingDatum #$ ptryLookup # (ptryFromDatumHash # vesting.datum) # datums
-
+    let vestingDatum = pfromPDatum @PVestingDatum #$ ptryFromInlineDatum # vesting.datum
     vestingDatumF <-
       pletFieldsC
         @[ "beneficiary"
@@ -589,7 +582,6 @@ pvalidateNormalFlowWr ::
   Term s (PValue 'Sorted 'Positive) ->
   Term s (PBuiltinList PTxInInfo) ->
   Term s (PBuiltinList PTxOut) ->
-  Term s (PMap 'Unsorted PDatumHash PDatum) ->
   Term s (PValue 'Sorted 'NoGuarantees) ->
   Term s PBool
 pvalidateNormalFlowWr
@@ -604,7 +596,6 @@ pvalidateNormalFlowWr
   ownInputValue
   txInputs
   txOutputs
-  datums
   mint = unTermCont do
     owedToDao <- pletC $ pdiv # (daoFeeUnits * numRaised) # daoFeeBase
     owedToPool <- pletC $ pdiv # ((numRaised - owedToDao) * raisedTokensPoolPartPercentage) # 100
@@ -640,8 +631,7 @@ pvalidateNormalFlowWr
             # userGivenShares
             # txOutputs
     vesting <- pletFieldsC @["datum", "value"] vestingOutput
-    -- TODO: inline always?
-    let vestingDatum = pfromPDatum @PVestingDatum #$ ptryLookup # (ptryFromDatumHash # vesting.datum) # datums
+    let vestingDatum = pfromPDatum @PVestingDatum #$ ptryFromInlineDatum # vesting.datum
 
     vestingDatumF <-
       pletFieldsC

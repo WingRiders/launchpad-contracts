@@ -160,7 +160,7 @@ spendHolderCreatePoolTx action config@LaunchpadConfig {owner, daoFeeReceiver, wr
     , case action of
         DoubleSatisfy -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef otherHolderUtxo) PTHF.NormalFlow Wr
         _ -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NormalFlow Wr
-    , payToScript vestingValidator (HashDatum vestingDatum) vestingValue
+    , payToScript vestingValidator (InlineDatum vestingDatum) vestingValue
     , mintValue (poolMintingPolicy) () poolShares
     , payToScript (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash)) (InlineDatum (lpDatum projectToken raisingToken)) (poolValue <> poolToken <> poolShares)
     , case action of
