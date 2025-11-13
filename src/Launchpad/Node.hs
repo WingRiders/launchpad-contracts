@@ -24,7 +24,7 @@ import PlutusTx qualified
 
 {- | Parameters of the Node Validator
 
-     "nodeAda" should be equal to (commitFoldFeeAda + rewardsFoldFeeAda + rewardsHolderOilAda)
+     "oilAda" should be equal to (commitFoldFeeAda + rewardsFoldFeeAda + oilAda)
 
      The correctness of the values that parametrize the script is checked on the backend.
      For increased transparency, there are specific values of the individual parameters listed in the transaction metadata.
@@ -66,7 +66,7 @@ data NodeConfig = NodeConfig
   , daoFeeReceiver :: Address
   , collateral :: Integer
   , nodeAda :: Integer
-  , foldOilAda :: Integer
+  , oilAda :: Integer
   , commitFoldFeeAda :: Integer
   }
   deriving (Generic)
@@ -111,7 +111,7 @@ data PNodeConfig (s :: S)
               , "daoFeeReceiver" ':= PAddress
               , "collateral" ':= PInteger
               , "nodeAda" ':= PInteger
-              , "foldOilAda" ':= PInteger
+              , "oilAda" ':= PInteger
               , "commitFoldFeeAda" ':= PInteger
               ]
           )
@@ -544,7 +544,7 @@ pcheckSeparatorNode =
   - nodeScriptHash field of R 0,1 is equal to the script hash of the list element validator
   - next field of R 0,1 is equal to the next field of A
   - commitFoldOwner field of R 0,1 is equal to the owner field of K
-  - there is at least foldOilAda ADA deposited in the rewards fold utxo
+  - there is at least oilAda ADA deposited in the rewards fold utxo
   - R 0,1 holds 2 unique tokens, ADA and rewards fold token
   - when the cutoffTime field of K is Nothing, the committed field of K is smaller than the max commitment of the launchpad config
   - when the cutoffTime field of K is a Just value, the committed field of K is equal to the max commitment of the launchpad config
@@ -571,7 +571,7 @@ pvalidateStartRewardsFold ::
 pvalidateStartRewardsFold
   minCommitment
   maxCommitment
-  foldOilAda
+  oilAda
   nodeCs
   selfValidatorHash
   commitFoldCs
@@ -613,7 +613,7 @@ pvalidateStartRewardsFold
         , ptraceIfFalse "H71" $ pisDJust # nodeD.next
         , ptraceIfFalse "H72" $ pvalueOf # mint # nodeCs # pscriptHashToTokenName selfValidatorHash #== (-1)
         , ptraceIfFalse "H73" $ pvalueOf # mint # commitFoldCs # pscriptHashToTokenName commitFoldValidatorHash #== (-1)
-        , ptraceIfFalse "H74" $ pvalueOf # rewardsFoldF.value # padaSymbol # padaToken #>= foldOilAda
+        , ptraceIfFalse "H74" $ pvalueOf # rewardsFoldF.value # padaSymbol # padaToken #>= oilAda
         , ptraceIfFalse "H75" $ pcountOfUniqueTokens # rewardsFoldF.value #== 2
         , ptraceIfFalse "H58" $ rewardsFoldD.committed #== commitFoldD.committed
         , ptraceIfFalse "H59" $ rewardsFoldD.overcommitted #== commitFoldD.overcommitted
@@ -891,7 +891,7 @@ pnodeScriptValidator cfg node redeemer context = unTermCont do
         , "daoFeeReceiver"
         , "collateral"
         , "nodeAda"
-        , "foldOilAda"
+        , "oilAda"
         , "commitFoldFeeAda"
         ]
       cfg
@@ -983,7 +983,7 @@ pnodeScriptValidator cfg node redeemer context = unTermCont do
               pvalidateStartRewardsFold
                 cfgF.projectMinCommitment
                 cfgF.projectMaxCommitment
-                cfgF.foldOilAda
+                cfgF.oilAda
                 nodeCs
                 selfValidatorHash
                 commitFoldCs

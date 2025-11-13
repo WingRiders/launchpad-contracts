@@ -7,7 +7,7 @@ import Data.List (sortBy)
 import Data.Maybe
 import Integration.Launchpad.Node hiding (None)
 import Integration.Launchpad.Validators
-import Integration.Mock (LaunchpadConfig (..), foldOilAdaAmount, rewardsHolderOilAdaAmount)
+import Integration.Mock (LaunchpadConfig (..), oilAdaAmount)
 import Integration.Util
 import Launchpad.Node qualified as N
 import Launchpad.Types
@@ -24,7 +24,7 @@ initCommitFoldMalicious :: LaunchpadConfig -> Address -> PubKeyHash -> Maybe Com
 initCommitFoldMalicious config owner wallet foldDatum nodeKey = do
   nodeUtxos <- utxoAt (nodeValidator config)
   let headNodeUtxo = findNodeUtxo nodeKey nodeUtxos
-  usp <- spend wallet (adaValue foldOilAdaAmount)
+  usp <- spend wallet (adaValue oilAdaAmount)
   range <- currentTimeRad 1_000
   submitTx wallet =<< validateIn range (initCommitFoldTx config usp owner headNodeUtxo foldDatum)
 
@@ -34,7 +34,7 @@ initCommitFold = initCommitFoldMalicious
 createCommitFold :: LaunchpadConfig -> PubKeyHash -> CommitFoldDatum -> AddToken -> Run ()
 createCommitFold config wallet datum addToken = do
   let value =
-        adaValue foldOilAdaAmount
+        adaValue oilAdaAmount
           <> case addToken of
             AddToken ->
               singleton
@@ -106,7 +106,7 @@ commitFoldOverTx config wallet commitFoldUtxos resultingDatum nodeUtxos action =
              ]
   where
     stealValue =
-      adaValue rewardsHolderOilAdaAmount
+      adaValue oilAdaAmount
         <> singleton
           (scriptCurrencySymbol (commitFoldMintingPolicy config))
           (scriptHashToTokenName (toValidatorHash (commitFoldValidator config)))
@@ -155,7 +155,7 @@ initCommitFoldTx config usp owner (nodeOutRef, nodeOut) datum =
     [ userSpend usp
     , mintValue (commitFoldMintingPolicy config) () mintedValue
     , refInputHash nodeOutRef (txOutDatum nodeOut)
-    , payToScript (commitFoldValidator config) (InlineDatum commitFoldDatum) (mintedValue <> adaValue foldOilAdaAmount)
+    , payToScript (commitFoldValidator config) (InlineDatum commitFoldDatum) (mintedValue <> adaValue oilAdaAmount)
     ]
   where
     commitFoldDatum = case datum of

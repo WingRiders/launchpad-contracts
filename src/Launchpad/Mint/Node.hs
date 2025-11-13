@@ -22,7 +22,7 @@ import PlutusTx qualified
 
 {- | Parameters of the Node Minting Policy
 
-     "nodeAda" should be equal to (commitFoldFeeAda + rewardsFoldFeeAda + rewardsHolderOilAda)
+     "nodeAda" should be equal to (commitFoldFeeAda + rewardsFoldFeeAda + oilAda)
 
      The correctness of the values that parametrize the script is checked on the backend.
      For increased transparency, there are specific values of the individual parameters listed in the transaction metadata.

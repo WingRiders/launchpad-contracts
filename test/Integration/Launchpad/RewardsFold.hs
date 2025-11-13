@@ -81,13 +81,13 @@ initRewardsFoldTx config wallet nodeRefScript commitFoldRefScript (nodeRef, node
     [ memptyIf V.isZero rewardsToken (mintValue (rewardsFoldMintingPolicy config) ())
     , memptyIf V.isZero commitToken (mintValue (commitFoldMintingPolicy config) ())
     , memptyIf V.isZero nodeToken (mintValue (nodeMintingPolicy config) ())
-    , payToScript (rewardsFoldValidator config) (InlineDatum rewardsFoldDatum) (rewardsToken <> adaValue foldOilAdaAmount)
+    , payToScript (rewardsFoldValidator config) (InlineDatum rewardsFoldDatum) (rewardsToken <> adaValue oilAdaAmount)
     , spendScriptRef nodeRefScript (nodeValidator config) nodeRef StartRewardsFold nodeDatum
     , spendScriptRef commitFoldRefScript (commitFoldValidator config) commitFoldRef DelegateCommitToNode commitFoldDatum
     , -- oil for the rewards fold
       -- oil for the rewards holder from the head node
       -- min ada from the commit fold
-      payToKey wallet (adaValue (rewardsHolderOilAdaAmount + commitFoldFeeAdaAmount + rewardsFoldFeeAdaAmount))
+      payToKey wallet (adaValue (oilAdaAmount + commitFoldFeeAdaAmount + rewardsFoldFeeAdaAmount))
     ]
   where
     nodeDatum = txOutputDatum nodeOut
@@ -142,7 +142,7 @@ initRewardsFoldTx config wallet nodeRefScript commitFoldRefScript (nodeRef, node
 createRewardsFold :: LaunchpadConfig -> PubKeyHash -> Integer -> RewardsFoldDatum -> AddToken -> Run ()
 createRewardsFold config wallet foldedNodes rewardsFoldDatum addToken = do
   let value =
-        adaValue (foldOilAdaAmount * foldedNodes)
+        adaValue (oilAdaAmount * foldedNodes)
           <> case addToken of
             AddToken ->
               singleton
@@ -258,7 +258,7 @@ nodeReward config differentStakingCredentialReward rewardsFold (nodeOut, node) a
             rewardsHolderValue
 
     rewardsHolderValue =
-      adaValue rewardsHolderOilAdaAmount
+      adaValue oilAdaAmount
         <> singleton raisingSymbol raisingToken (node.committed - nodeCommit)
         <> singleton projectSymbol projectToken nodeRewards
         <> addedValue
@@ -272,6 +272,7 @@ nodeReward config differentStakingCredentialReward rewardsFold (nodeOut, node) a
     AssetClass (projectSymbol, projectToken) = config.projectToken
     AssetClass (raisingSymbol, raisingToken) = config.raisingToken
 
+-- TODO: that is definitely incorrect in the final iteration
 rewardsFoldOverTx ::
   LaunchpadConfig ->
   RewardsFoldIteration ->
@@ -409,7 +410,7 @@ rewardsFoldOverTx
               wallet
               ( adaValue (rewardsFoldFeeAdaAmount * fromIntegral (length nodeUtxos))
                   -- leftover ADA from separator nodes
-                  <> adaValue (rewardsHolderOilAdaAmount * fromIntegral (separatorNodes))
+                  <> adaValue (oilAdaAmount * fromIntegral (separatorNodes))
                   <> stealedRewards
                   <> if burnNodeTokens then mempty else (inv burnedNodeTokens)
               )

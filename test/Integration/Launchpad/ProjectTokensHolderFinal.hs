@@ -43,7 +43,7 @@ createProjectTokensHolderFinal config@LaunchpadConfig {projectToken, raisingToke
   let value =
         assetClassValue projectToken (totalTokens - tokensToDistribute)
           <> assetClassValue raisingToken raised
-  -- Incorrect, but we must have at least something here, like 2 ada
+  -- Incorrect, but we must have at least something here, like 2 ada?
   -- <> assetClassValue adaAssetClass config.collateral
 
   usp <- spend wallet value
@@ -178,11 +178,11 @@ spendHolderCreatePoolTx
     mconcat
       [ userSpend usp
       , mintValue poolMintingPolicy () mintedValue
-      , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NoPool Wr
+      , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NormalFlow Wr
       , spendScript mockFactoryScript mockFactoryRef () ()
       , case action of
           DoubleSatisfy -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef otherHolderUtxo) PTHF.NormalFlow Wr
-          _ -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NoPool Wr
+          _ -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NormalFlow Wr
       , payToScript vestingValidator (InlineDatum vestingDatum) vestingValue
       , mintValue (poolMintingPolicy) () poolShares
       , payToScript (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash)) (InlineDatum (lpDatum projectToken raisingToken)) (poolValue <> poolToken <> poolShares)

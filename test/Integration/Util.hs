@@ -209,7 +209,7 @@ nodeConfig lCfg@LaunchpadConfig {..} =
     , projectToken = pToken
     , collateral
     , nodeAda
-    , foldOilAda
+    , oilAda
     , commitFoldFeeAda
     }
   where
@@ -260,7 +260,7 @@ rewardsFoldConfig lCfg =
     , presaleTierCs = lCfg.presaleTierCs
     , tokensToDistribute = lCfg.tokensToDistribute
     , withdrawalEndTime = lCfg.withdrawalEndTime
-    , oilAda = lCfg.rewardsHolderOilAda
+    , oilAda = lCfg.oilAda
     , commitFoldFeeAda = lCfg.commitFoldFeeAda
     , splitBps = 10_000
     , owner = lCfg.owner

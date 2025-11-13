@@ -84,9 +84,8 @@ data LaunchpadConfig = LaunchpadConfig
   , presaleTierMaxCommitment :: Integer
   , defaultTierMaxCommitment :: Integer
   , nodeAda :: Integer
-  , foldOilAda :: Integer
   , commitFoldFeeAda :: Integer
-  , rewardsHolderOilAda :: Integer
+  , oilAda :: Integer
   }
   deriving (Show, Eq, Ord)
 
@@ -193,17 +192,13 @@ mockStakingCredential = StakingHash (PubKeyCredential mockGenericPkh)
 mockRequestScriptHash :: ScriptHash
 mockRequestScriptHash = "00000000000000000000000000000000000000000000000000000000"
 
--- | The number of oil ADA that must be locked into each user node.
+-- | The number of ADA that must be locked into each user node.
 nodeAdaAmount :: Integer
-nodeAdaAmount = rewardsHolderOilAdaAmount + commitFoldFeeAdaAmount + rewardsFoldFeeAdaAmount
+nodeAdaAmount = oilAdaAmount + commitFoldFeeAdaAmount + rewardsFoldFeeAdaAmount
 
--- | The number of oil ADA that must be locked into the rewards holder utxo.
-rewardsHolderOilAdaAmount :: Integer
-rewardsHolderOilAdaAmount = 2_000_000
-
--- | The number of oil ADA that must be locked into the rewards fold utxo.
-foldOilAdaAmount :: Integer
-foldOilAdaAmount = 3_000_000
+-- | The number of oil ADA that must be locked into various utxo.
+oilAdaAmount :: Integer
+oilAdaAmount = 2_000_000
 
 -- | Fee given to the commit fold owner per a "commit-folded" node.
 commitFoldFeeAdaAmount :: Integer
@@ -260,9 +255,8 @@ defaultLaunchpadConfig =
     , presaleTierStartTime = 100_000
     , defaultStartTime = 200_000
     , nodeAda = nodeAdaAmount
-    , foldOilAda = foldOilAdaAmount
     , commitFoldFeeAda = commitFoldFeeAdaAmount
-    , rewardsHolderOilAda = rewardsHolderOilAdaAmount
+    , oilAda = oilAdaAmount
     }
 
 lpDatum :: AssetClass -> AssetClass -> WrPoolConstantProductDatum

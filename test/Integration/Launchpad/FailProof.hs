@@ -86,7 +86,7 @@ initFailProofTx action config usp ((nodeRef, nodeOut), nodeScriptRef) (holderUtx
     , payToKey
         config.owner
         ( txBoxValue holderUtxo
-            <> assetClassValue adaAssetClass (nodeAdaAmount + foldOilAdaAmount - config.collateral)
+            <> assetClassValue adaAssetClass (nodeAdaAmount + oilAdaAmount - config.collateral)
             <> burnedHolderToken
         )
     , mintValue (failProofMintingPolicy config) () failProofToken
