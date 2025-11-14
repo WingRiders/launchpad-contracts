@@ -27,7 +27,6 @@ import Plutarch.DataRepr
 import Plutarch.Extra.IsData (EnumIsData (..), PlutusTypeEnumData)
 import Plutarch.Extra.ScriptContext (pfromPDatum, ptryFromInlineDatum)
 import Plutarch.Extra.TermCont
-import Plutarch.Extra.Value (padaOf)
 import Plutarch.Lift
 import Plutarch.PlutusScript
 import Plutarch.Prelude
@@ -381,9 +380,18 @@ pvalidateNormalFlowSundae
           ptraceIfFalse "J5" $ protocolFees #== pfield @"poolCreationFee" # settings
         , ptraceIfFalse "J6" $ pcountOfUniqueTokens # vesting.value #== 2
         , -- The pool receives all project tokens, we don't need to check the datum assets, as the policy does that
-          ptraceIfFalse "J7" $ pvalueOf # poolOutputF.value # projectCs # projectTn #>= pvalueOf # ownInputValue # projectCs # projectTn
-        , -- The pool receives all raising tokens, we don't need to check the datum assets, as the policy does that
-          ptraceIfFalse "J8" $ pvalueOf # poolOutputF.value # raisingCs # raisingTn #>= owedToPool
+          ptraceIfFalse "J7" $ pvalueOf # poolOutputF.value # projectCs # projectTn #== pvalueOf # ownInputValue # projectCs # projectTn
+        , -- The pool receives all raising tokens or more, we don't need to check the datum assets, as the policy does that
+          ptraceIfFalse "J8" $
+            pif
+              (pisAda # raisingCs)
+              -- Please note that it's possible to add more ada and increase the project token price
+              -- when the project is raising ada;
+              -- That's done to allow finishing the launch when there's a pool creation fee
+              -- and the utxo doesn't have enough ada to cover it;
+              -- Note that in case the fee is above the tolerance, the failing flow must be used instead.
+              (pvalueOf # poolOutputF.value # raisingCs # raisingTn #>= owedToPool)
+              (pvalueOf # poolOutputF.value # raisingCs # raisingTn #== owedToPool)
         , -- The nft was minted, the policy will ensure it's stored in the pool
           ptraceIfFalse "J9" $ pvalueOf # mint # poolCs # poolNft #== 1
         , -- The vesting has correct datum
@@ -461,19 +469,15 @@ pvalidateFailedFlow
                 , ptraceIfFalse "J23" $ poolProofFields.raisingToken #== raisingTn
                 , ptraceIfFalse "J24" $ poolProofFields.dex #== pcon PWr
                 ]
-          -- For Sundae the failing happens when there's not enough ada
-          -- to cover the pool creation fee or it's above the tolerance
+          -- For Sundae the failing happens when the pool creation fee is above the tolerance
           -- NOTE: in case of a stables-collecting launch where the pool creation fee is above min ada
-          --       this will always allow to fail the launch and send the tokens to DAO;
-          --       it's still possible to finish with the normal flow by providing the fee
-          --       in a different input utxo however, and the agent prioritizes the normal flow
+          --       the utxo won't have enough ada to pay for the fee
+          --       it's still possible to finish with the normal flow by providing the fee externally
+          --       it's explicitely not a failure scenario
           PSundae -> unTermCont do
-            holderAda <- pletC (padaOf # ownInputValue)
             let settings = findSundaeSettingsDatum txRefInputs settingsCurrencySymbol
                 poolCreationFee = pfield @"poolCreationFee" # settings
-            pure $
-              (ptraceIfFalse "J25" $ poolCreationFee #>= sundaeFeeTolerance)
-                #|| (ptraceIfFalse "J26" $ holderAda #< poolCreationFee)
+            pure $ ptraceIfFalse "J25" $ poolCreationFee #> sundaeFeeTolerance
 
     projectTokens <- pletC (pvalueOf # ownInputValue # projectCs # projectTn)
     let raisedToDao = numRaised
@@ -576,9 +580,9 @@ pvalidateNormalFlowWr
       , -- The vesting has ada and shares
         ptraceIfFalse "J33" $ pcountOfUniqueTokens # vesting.value #== 2
       , -- The pool receives all project tokens, ensures the pool assets are correct as the factory checks token count
-        ptraceIfFalse "J34" $ pvalueOf # poolOutputF.value # projectCs # projectTn #>= pvalueOf # ownInputValue # projectCs # projectTn
-      , -- The pool receives the raising tokens, ensures the pool assets are correct as the factory checks token count
-        ptraceIfFalse "J35" $ pvalueOf # poolOutputF.value # raisingCs # raisingTn #>= numRaised
+        ptraceIfFalse "J34" $ pvalueOf # poolOutputF.value # projectCs # projectTn #== pvalueOf # ownInputValue # projectCs # projectTn
+      , -- The pool receives all raising tokens, ensures the pool assets are correct as the factory checks token count
+        ptraceIfFalse "J35" $ pvalueOf # poolOutputF.value # raisingCs # raisingTn #== numRaised
       , -- The pool staking part is set to nothing
         ptraceIfFalse "J36" $ pdnothing #== pfield @"stakingCredential" # poolOutputF.address
       , -- The vesting has correct datum
