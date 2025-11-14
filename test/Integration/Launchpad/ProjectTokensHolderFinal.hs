@@ -6,18 +6,15 @@ import Integration.Mock
 import Integration.Util
 import Integration.Vesting (vestingValidator)
 import Launchpad.Constants qualified as C
-import Launchpad.Mint.ProjectTokensHolder qualified as PTH
 import Launchpad.PoolTypes (WrPoolConstantProductDatum (..))
 import Launchpad.ProjectTokensHolderFinal qualified as PTHF
-import Launchpad.ProjectTokensHolderFirst qualified as PTHFirst
 import Launchpad.Types (PoolProofDatum (..))
 import Other.Vesting (VestingDatum (..))
-import Plutarch.Extra.ScriptContext (scriptHashToTokenName)
 import Plutus.Model
 import Plutus.Util (adaAssetClass)
 import PlutusLedgerApi.V1.Address (pubKeyHashAddress)
 import PlutusLedgerApi.V1.Interval (interval)
-import PlutusLedgerApi.V1.Value (assetClass, assetClassValue, assetClassValueOf)
+import PlutusLedgerApi.V1.Value (assetClassValue, assetClassValueOf)
 import PlutusLedgerApi.V2 (PubKeyHash, TxOutRef, Value, singleton)
 import PlutusTx.Prelude (inv)
 import Test.Util (vUSDT)
@@ -41,7 +38,6 @@ data MaliciousWrTokenHolderAction
   | NoOwnerCompensations
   | WrongPoolProof
   | DoubleSatisfy
-  | NoBurnedHolderToken
 
 maliciousPkh :: PubKeyHash
 maliciousPkh = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
@@ -49,16 +45,13 @@ maliciousPkh = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 createProjectTokensHolderFinal :: LaunchpadConfig -> Integer -> PubKeyHash -> Run ()
 createProjectTokensHolderFinal config@LaunchpadConfig {projectToken, raisingToken, totalTokens, tokensToDistribute} raised wallet = do
   let value =
-        assetClassValue projectTokensHolderValidityToken 1
-          <> assetClassValue projectToken (totalTokens - tokensToDistribute)
+        assetClassValue projectToken (totalTokens - tokensToDistribute)
           <> assetClassValue raisingToken raised
           <> assetClassValue adaAssetClass config.collateral
 
   usp <- spend wallet value
   tx <- signTx wallet $ createProjectTokensHolderFinalTx config usp value
   void $ sendTx tx
-  where
-    projectTokensHolderValidityToken = assetClass (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config)) (scriptHashToTokenName (PTHFirst.projectTokensHolderScriptValidatorHash (firstTokensHolderConfig config)))
 
 createProjectTokensHolderFinalTx :: LaunchpadConfig -> UserSpend -> Value -> Tx
 createProjectTokensHolderFinalTx config usp val =
@@ -138,16 +131,11 @@ spendHolderCreatePool action config@LaunchpadConfig {..} wallet signer = do
       ownerValue =
         case action of
           NoOwnerCompensations -> mempty
-          NoBurnedHolderToken ->
-            assetClassValue raisingToken remainingRaisedTokensQty
-              <> assetClassValue projectTokensHolderValidityToken 1
-              <> assetClassValue adaAssetClass config.collateral
           _ -> assetClassValue raisingToken remainingRaisedTokensQty <> assetClassValue adaAssetClass config.collateral
       tx = spendHolderCreatePoolTx action config usp factoryRef holderUtxos vestingDatum mintedValue poolValue poolToken poolShares vestingValue ownerValue daoFeeReceiverValue
 
   submitTx wallet =<< validateIn (interval lower upper) =<< signTx signer tx
   where
-    projectTokensHolderValidityToken = assetClass (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config)) (scriptHashToTokenName (PTHFirst.projectTokensHolderScriptValidatorHash (firstTokensHolderConfig config)))
     shareQuantity :: Integer -> Integer -> Integer
     shareQuantity p r = floor @Double (sqrt (fromIntegral (p * r)))
 
@@ -184,16 +172,7 @@ spendHolderCreatePoolTx action config@LaunchpadConfig {owner, daoFeeReceiver, wr
         LessDaoFees -> payToKey owner (ownerValue <> assetClassValue raisingToken 1)
         DoubleSatisfy -> payToKey owner (ownerValue <> stealValue)
         _ -> payToKey owner ownerValue
-    , case action of
-        NoBurnedHolderToken -> mempty
-        _ ->
-          mintValue
-            (projectTokensHolderMintingPolicy config)
-            ()
-            (assetClassValue projectTokensHolderValidityToken (-1))
     ]
-  where
-    projectTokensHolderValidityToken = assetClass (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config)) (scriptHashToTokenName (PTHFirst.projectTokensHolderScriptValidatorHash (firstTokensHolderConfig config)))
 
 spendHolderPoolExists :: MaliciousWrTokenHolderAction -> LaunchpadConfig -> PubKeyHash -> PubKeyHash -> Run ()
 spendHolderPoolExists action config@LaunchpadConfig {..} wallet signer = do
@@ -221,10 +200,7 @@ spendHolderPoolExists action config@LaunchpadConfig {..} wallet signer = do
             NoOwnerCompensations -> assetClassValue raisingToken remainingRaisedTokensQty <> assetClassValue adaAssetClass config.collateral
             _ -> mempty
       ownerValue =
-        case action of
-          NoBurnedHolderToken -> assetClassValue projectTokensHolderValidityToken 1
-          _ -> mempty
-          <> assetClassValue raisingToken remainingRaisedTokensQty
+        assetClassValue raisingToken remainingRaisedTokensQty
           <> assetClassValue adaAssetClass config.collateral
           <> case action of
             NoProjectTokensToDao -> assetClassValue projectToken projectTokensQty
@@ -235,8 +211,6 @@ spendHolderPoolExists action config@LaunchpadConfig {..} wallet signer = do
             _ -> mempty
 
   submitTx wallet =<< signTx signer (spendHolderPoolExistsTx action config holderUtxo poolProofUtxo ownerValue daoFeeReceiverValue)
-  where
-    projectTokensHolderValidityToken = assetClass (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config)) (scriptHashToTokenName (PTHFirst.projectTokensHolderScriptValidatorHash (firstTokensHolderConfig config)))
 
 spendHolderPoolExistsTx :: MaliciousWrTokenHolderAction -> LaunchpadConfig -> TxBox (TypedValidator () PTHF.TokenHolderRedeemerFinal) -> TxBox (TypedValidator PoolProofDatum ()) -> Value -> Value -> Tx
 spendHolderPoolExistsTx action config@LaunchpadConfig {owner, daoFeeReceiver} holderUtxo poolProofUtxo ownerValue daoFeeReceiverValue =
@@ -247,13 +221,4 @@ spendHolderPoolExistsTx action config@LaunchpadConfig {owner, daoFeeReceiver} ho
     , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.PoolExists ()
     , payToKey daoFeeReceiver daoFeeReceiverValue
     , payToKey owner ownerValue
-    , case action of
-        NoBurnedHolderToken -> mempty
-        _ ->
-          mintValue
-            (projectTokensHolderMintingPolicy config)
-            ()
-            (assetClassValue projectTokensHolderValidityToken (-1))
     ]
-  where
-    projectTokensHolderValidityToken = assetClass (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config)) (scriptHashToTokenName (PTHFirst.projectTokensHolderScriptValidatorHash (firstTokensHolderConfig config)))

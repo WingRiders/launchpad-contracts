@@ -3,7 +3,6 @@
 module Launchpad.Mint.ProjectTokensHolder where
 
 import Launchpad.Types
-import Launchpad.Util (pexpectedTokensHolderValidityCount)
 import Plutarch
 import Plutarch.Api.V1 (PCredential (PScriptCredential))
 import Plutarch.Api.V1.Address (PCredential (PPubKeyCredential))
@@ -50,8 +49,6 @@ data TokensHolderPolicyConfig = TokensHolderPolicyConfig
   , collateral :: Integer
   , starter :: TxOutRef
   , nodeSymbol :: CurrencySymbol
-  , usesWr :: Bool
-  , usesSundae :: Bool
   }
   deriving (Show, Eq, Ord, Generic)
 
@@ -71,9 +68,6 @@ data PTokensHolderPolicyConfig (s :: S)
               , "collateral" ':= PInteger
               , "starter" ':= PTxOutRef
               , "nodeSymbol" ':= PCurrencySymbol
-              , -- REVIEW: do we ensure at least one is true?
-                "usesWr" ':= PBool
-              , "usesSundae" ':= PBool
               ]
           )
       )
@@ -122,16 +116,13 @@ pprojectTokensHolderMintingPolicyTyped cfg context = unTermCont do
   PPair ownTn ownCount <- pmatchC (pvalueOfSingleton' # ownSymbol # mint)
   cfgF <-
     pletFieldsC
-      @'["owner", "startTime", "totalTokens", "projectSymbol", "projectToken", "collateral", "starter", "nodeSymbol", "usesWr", "usesSundae"]
+      @'["owner", "startTime", "totalTokens", "projectSymbol", "projectToken", "collateral", "starter", "nodeSymbol"]
       cfg
-
-  -- We mint as many tokens as there are dexes we use
-  expectedMint <- pletC $ pexpectedTokensHolderValidityCount cfgF.usesWr cfgF.usesSundae
 
   pure $
     ( pcond
         [
-          ( ptraceIfFalse "E1" $ ownCount #== expectedMint
+          ( ptraceIfFalse "E1" $ ownCount #== 1
           , perrorIfFalse #$ pmatch (pvalueOfSingleton' # cfgF.nodeSymbol # mint) \(PPair nodeTn nodeCount) ->
               pmatch (pfiniteTxValidityRangeTimestamps # infoF.validRange) \(PTimestamps _ upper) ->
                 pand'List
@@ -143,13 +134,13 @@ pprojectTokensHolderMintingPolicyTyped cfg context = unTermCont do
                         # pisCorrectTokensHolder
                           (cfgF.totalTokens, cfgF.collateral)
                           (cfgF.projectSymbol, cfgF.projectToken)
-                          (ownSymbol, ownTn, expectedMint)
+                          (ownSymbol, ownTn, 1)
                           nodeTn
                         # infoF.outputs
                   , ptraceIfFalse "E6" $ nodeCount #== 1
                   ]
           )
-        , (ownCount #== -expectedMint, pconstant ())
+        , (ownCount #== -1, pconstant ())
         ]
         (ptraceError "E7")
     )

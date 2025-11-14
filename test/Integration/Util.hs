@@ -280,8 +280,6 @@ tokensHolderPolicyConfig lCfg =
     , projectToken = snd (unAssetClass lCfg.projectToken)
     , nodeSymbol = N.nodeMintingPolicySymbol (nodePolicyConfig lCfg)
     , collateral = lCfg.collateral
-    , usesWr = lCfg.usesWr
-    , usesSundae = lCfg.usesSundae
     }
 
 firstTokensHolderConfig :: LaunchpadConfig -> PTHFirst.TokensHolderFirstConfig
@@ -293,8 +291,6 @@ firstTokensHolderConfig lCfg =
     , startTime = lCfg.startTime
     , withdrawalEndTime = lCfg.withdrawalEndTime
     , daoAdmin = lCfg.daoAdmin
-    , usesWr = lCfg.usesWr
-    , usesSundae = lCfg.usesSundae
     }
 
 finalWrTokensHolderConfig :: LaunchpadConfig -> PTHF.TokensHolderFinalConfig
@@ -340,6 +336,6 @@ rewardsHolderConfig lCfg =
   RH.RewardsHolderConfig
     { poolProofValidatorHash = poolProofScriptValidatorHash (poolProofConfig lCfg)
     , poolProofSymbol = poolProofMintingPolicySymbol (poolProofPolicyConfig lCfg)
-    , usesWr = True
-    , usesSundae = False
+    , usesWr = lCfg.usesWr
+    , usesSundae = lCfg.usesSundae
     }

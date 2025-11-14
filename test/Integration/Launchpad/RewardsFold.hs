@@ -13,6 +13,7 @@ import Integration.Launchpad.Node
 import Integration.Launchpad.Validators
 import Integration.Mock
 import Integration.Util
+import Launchpad.Mint.ProjectTokensHolder qualified as PTH
 import Launchpad.Mint.RewardsFold (rewardsFoldMintingPolicySymbol)
 import Launchpad.Types
 import Plutarch.Extra.ScriptContext (scriptHashToTokenName)
@@ -339,15 +340,22 @@ rewardsFoldOverTx
                         <> ada (adaOf (txOutValue rewardsFoldOut))
                     )
                 )
-                  <> ( mintValue
-                        (rewardsFoldMintingPolicy config)
-                        ()
-                        ( singleton
-                            (rewardsFoldMintingPolicySymbol (rewardsFoldPolicyConfig config))
-                            (scriptHashToTokenName (toValidatorHash (rewardsFoldValidator config)))
-                            (-1)
-                        )
-                     )
+                  <> mintValue
+                    (rewardsFoldMintingPolicy config)
+                    ()
+                    ( singleton
+                        (rewardsFoldMintingPolicySymbol (rewardsFoldPolicyConfig config))
+                        (scriptHashToTokenName (toValidatorHash (rewardsFoldValidator config)))
+                        (-1)
+                    )
+                  <> mintValue
+                    (projectTokensHolderMintingPolicy config)
+                    ()
+                    ( singleton
+                        (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config))
+                        (scriptHashToTokenName (toValidatorHash (projectTokensHolderFirstValidator config)))
+                        (-1)
+                    )
            , case iteration of
               NotLastNode ->
                 if differentStakingCredentialHolder
@@ -376,6 +384,10 @@ rewardsFoldOverTx
                       ( txOutValue firstTokensHolderOut
                           <> assetClassValue config.raisingToken collectedCommitted
                           <> memptyIfZero (singleton projectSymbol projectToken (-distributedRewards))
+                          <> singleton
+                            (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config))
+                            (scriptHashToTokenName (toValidatorHash (projectTokensHolderFirstValidator config)))
+                            (-1)
                       )
                   else
                     payToScript
@@ -384,6 +396,11 @@ rewardsFoldOverTx
                       ( txOutValue firstTokensHolderOut
                           <> assetClassValue config.raisingToken collectedCommitted
                           <> memptyIfZero (singleton projectSymbol projectToken (-distributedRewards))
+                          <> ( singleton
+                                (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config))
+                                (scriptHashToTokenName (toValidatorHash (projectTokensHolderFirstValidator config)))
+                                (-1)
+                             )
                       )
            , -- that is the rewards fold fee
              payToKey

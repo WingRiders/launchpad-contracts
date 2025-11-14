@@ -42,7 +42,6 @@ spendTestsNoPool =
   , bad defaultLaunchpadConfig "Fails when no fees are paid to daoFeeReceiver" (lock_to_pool NoDaoFees)
   , bad defaultLaunchpadConfig "Fails when launchpad owner is not compensated" (lock_to_pool NoOwnerCompensations)
   , bad defaultLaunchpadConfig "Fails when token holders is doublespent and dao fees stolen" double_spend_two_token_holders
-  , bad defaultLaunchpadConfig "Fails when the tokens holder validity token is not burned" (lock_to_pool NoBurnedHolderToken)
   ]
 
 lock_to_pool :: MaliciousWrTokenHolderAction -> LaunchpadConfig -> Run ()
@@ -63,7 +62,6 @@ spendTestsPoolExists =
   , bad defaultLaunchpadConfig "Fails when no project tokens are given to dao for locking" (move_funds_to_dao NoProjectTokensToDao)
   , bad defaultLaunchpadConfig "Fails when launchpad owner is not compensated" (move_funds_to_dao NoOwnerCompensations)
   , bad defaultLaunchpadConfig "Fails when wrong pool proof is present" (move_funds_to_dao WrongPoolProof)
-  , bad defaultLaunchpadConfig "Fails when the tokens holder validity token is not burned" (move_funds_to_dao NoBurnedHolderToken)
   ]
 
 move_funds_to_dao :: MaliciousWrTokenHolderAction -> LaunchpadConfig -> Run ()

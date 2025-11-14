@@ -6,7 +6,6 @@ module Launchpad.RewardsFold where
 import Data.Functor (($>))
 import Launchpad.Constants
 import Launchpad.Types
-import Launchpad.Util (pexpectedTokensHolderValidityCount)
 import Plutarch
 import Plutarch.Api.V1.Value (padaSymbol, padaToken, pvalueOf)
 import Plutarch.Api.V2
@@ -597,7 +596,6 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
                 inputHolderProjectTokens
             )
             ( pcheckMiddleRewardsFold
-                splitBps
                 selfValidatorHash
                 selfCs
                 outputs
@@ -707,12 +705,6 @@ pcheckLastRewardsFold
                         # pprojectToken
                     outWrAda =
                       pvalueOf # outWrValue # padaSymbol # padaToken
-                    outWrValidity =
-                      pvalueOf
-                        # outWrValue
-                        -- Note that the token is reused from the first holder script
-                        # projectTokensHolderCs
-                        # pscriptHashToTokenName projectTokensHolderFirstValidatorHash
                 pure $
                   pand'List
                     [ ptraceIfFalse "L30" $
@@ -723,9 +715,8 @@ pcheckLastRewardsFold
                     , ptraceIfFalse "L33" $ wrProjectExpected #== outWrProject
                     , -- Collateral portion and oil
                       ptraceIfFalse "L34" $ wrAdaExpected #<= outWrAda
-                    , -- ada, committed and project tokens, and the tokens holder token
-                      ptraceIfFalse "L36" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol outWrValue #== 4
-                    , ptraceIfFalse "L36.5" $ outWrValidity #== 1
+                    , -- ada, committed and project tokens
+                      ptraceIfFalse "L35?" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol outWrValue #== 3
                     ]
             )
             ptrue
@@ -757,12 +748,6 @@ pcheckLastRewardsFold
                         # pprojectToken
                     outSundaeAda =
                       pvalueOf # outSundaeValue # padaSymbol # padaToken
-                    outSundaeValidity =
-                      pvalueOf
-                        # outSundaeValue
-                        -- Note that the token is reused from the first holder script
-                        # projectTokensHolderCs
-                        # pscriptHashToTokenName projectTokensHolderFirstValidatorHash
                 pure $
                   pand'List
                     [ (ptryFromInlineDatum # outSundae.datum)
@@ -772,9 +757,8 @@ pcheckLastRewardsFold
                     , sundaeProjectExpected #== outSundaeProject
                     , -- Collateral portion and oil
                       sundaeAdaExpected #<= outSundaeAda
-                    , -- ada, committed and project tokens, and the tokens holder token
-                      pcountOfUniqueTokensWithOverlap pcommittedSymbol outSundaeValue #== 4
-                    , outSundaeValidity #== 1
+                    , -- ada, committed and project tokens
+                      pcountOfUniqueTokensWithOverlap pcommittedSymbol outSundaeValue #== 3
                     ]
             )
             ptrue
@@ -784,6 +768,7 @@ pcheckLastRewardsFold
         [ isHolderOutputWrCorrect
         , isHolderOutputSundaeCorrect
         , ptraceIfFalse "L35" $ pvalueOf # mint # selfCs # pscriptHashToTokenName selfValidatorHash #== -1
+        , ptraceIfFalse "L36" $ pvalueOf # mint # projectTokensHolderCs # pscriptHashToTokenName projectTokensHolderFirstValidatorHash #== -1
         , ptraceIfFalse "L37" $ pnot # (pelem # pdata commitFoldCompensationIndex # outputNodesIndices)
         , pletFields @["value", "address"] (pelemAt # commitFoldCompensationIndex # outputs) \commitCompensation ->
             pand'List
@@ -794,7 +779,6 @@ pcheckLastRewardsFold
         ]
 
 pcheckMiddleRewardsFold ::
-  Term s PInteger ->
   Term s PScriptHash ->
   Term s PCurrencySymbol ->
   Term s (PBuiltinList PTxOut) ->
@@ -814,7 +798,6 @@ pcheckMiddleRewardsFold ::
   Term s PInteger ->
   Term s PBool
 pcheckMiddleRewardsFold
-  splitBps
   selfValidatorHash
   selfCs
   outputs
@@ -870,9 +853,6 @@ pcheckMiddleRewardsFold
         )
     foldOutD <- pletC (pfromPDatum @PRewardsFoldDatum # (ptryFromInlineDatum # foldOut.datum))
 
-    let expectedValidityCount = plet (splitBps #> 0) \usesWr -> plet (splitBps #< 10_000) \usesSundae ->
-          pexpectedTokensHolderValidityCount usesWr usesSundae
-
     pure $
       pand'List
         [ ptraceIfFalse "L43" $ foldOutD #== expectedOutD
@@ -886,7 +866,7 @@ pcheckMiddleRewardsFold
               [ ptraceIfFalse "L48" $ expectedCommittedTokens #== outputHolderCommittedTokens
               , -- ada, committed (in case there are currently any) and project tokens, and the tokens holder token
                 ptraceIfFalse "L49" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol projectTokensHolderOutputV #== pif (expectedCommittedTokens #== 0) 3 4
-              , ptraceIfFalse "L49.5" $ outputHolderValidity #== expectedValidityCount
+              , ptraceIfFalse "L49.5" $ outputHolderValidity #== 1
               ]
         , ptraceIfFalse "L50" $ inputHolderProjectTokens - resultAcc.distributedPerTx #== outputHolderProjectTokens
         , ptraceIfFalse "L51" $ inputHolderAda #<= outputHolderAda
