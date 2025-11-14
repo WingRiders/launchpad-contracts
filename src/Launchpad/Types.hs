@@ -448,8 +448,11 @@ instance ScottConvertible PRewardsFoldDatum where
 
 data RewardsFoldRedeemer
   = -- | Do a fold over the nodes and distribute the rewards.
-    -- The commit fold compensation index is ignored in all steps except the last.
-    RewardsFold [Integer] [Integer] Integer Integer Integer
+    -- The commit fold compensation index,
+    -- the dao compensation index,
+    -- and the owner compensation index
+    -- are ignored in all steps except the last.
+    RewardsFold [Integer] [Integer] Integer Integer Integer Integer Integer
   | RewardsFoldEmergencyWithdrawal
   deriving (Show, Eq, Ord, Generic)
 
@@ -466,6 +469,8 @@ data PRewardsFoldRedeemer (s :: S)
                , "commitFoldCompensationIndex" ':= PInteger
                , "inputRewardsFoldIndex" ':= PInteger
                , "inputTokensHolderIndex" ':= PInteger
+               , "daoCompensationIndex" ':= PInteger
+               , "ownerCompensationIndex" ':= PInteger
                ]
           )
       )

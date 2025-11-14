@@ -506,6 +506,8 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
           , "commitFoldCompensationIndex"
           , "inputTokensHolderIndex"
           , "inputRewardsFoldIndex"
+          , "daoCompensationIndex"
+          , "ownerCompensationIndex"
           ]
         redeemer
     inputNodes <- pletC redeemerF.inputNodes
@@ -595,6 +597,8 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
                 selfCs
                 redeemerF.outputNodes
                 (pfromData redeemerF.commitFoldCompensationIndex)
+                (pfromData redeemerF.daoCompensationIndex)
+                (pfromData redeemerF.ownerCompensationIndex)
                 pcommittedSymbol
                 pcommittedToken
                 pprojectSymbol
@@ -642,6 +646,8 @@ pcheckLastRewardsFold ::
   Term s PCurrencySymbol ->
   Term s (PBuiltinList (PAsData PInteger)) ->
   Term s PInteger ->
+  Term s PInteger ->
+  Term s PInteger ->
   Term s PCurrencySymbol ->
   Term s PTokenName ->
   Term s PCurrencySymbol ->
@@ -668,6 +674,8 @@ pcheckLastRewardsFold
   selfCs
   outputNodesIndices
   commitFoldCompensationIndex
+  daoCompensationIndex
+  ownerCompensationIndex
   pcommittedSymbol
   pcommittedToken
   pprojectSymbol
@@ -793,47 +801,45 @@ pcheckLastRewardsFold
         , ptraceIfFalse "L36" $ pvalueOf # mint # projectTokensHolderCs # pscriptHashToTokenName projectTokensHolderFirstValidatorHash #== -1
         , -- The commit fold compensations can't be reused as a node compensation
           -- this check prevents a double satisfaction attack
-          -- TOOD: prevent double satisfaction for dao/owner by using indices and checking neq
-          ptraceIfFalse "L37" $ pnot # (pelem # pdata commitFoldCompensationIndex # outputNodesIndices)
-        , -- the commit fold is compensated
+          ptraceIfFalse "L43" $ pnot # (pelem # pdata commitFoldCompensationIndex # outputNodesIndices)
+        , ptraceIfFalse "L44" $ pnot # (pelem # pdata daoCompensationIndex # outputNodesIndices)
+        , ptraceIfFalse "L45" $ pnot # (pelem # pdata ownerCompensationIndex # outputNodesIndices)
+        , ptraceIfFalse "L46" $ pnot # (daoCompensationIndex #== ownerCompensationIndex)
+        , ptraceIfFalse "L47" $ pnot # (daoCompensationIndex #== commitFoldCompensationIndex)
+        , ptraceIfFalse "L48" $ pnot # (ownerCompensationIndex #== commitFoldCompensationIndex)
+        , -- the commit fold is compensated, oil comes from the rewards fold utxo
           pletFields @["value", "address"] (pelemAt # commitFoldCompensationIndex # outputs) \commitCompensation ->
             pand'List
               [ ptraceIfFalse "L38" $ padaOf # commitCompensation.value #>= expectedOutAda
               , ptraceIfFalse "L39" $ pcountOfUniqueTokens # commitCompensation.value #== 1
               , ptraceIfFalse "L40" $ pfromData commitCompensation.address #== commitFoldOwner
               ]
-        , -- The DAO is compensated, TODO: use index from redeemer
-          pany
-            # plam
-              ( \o -> pletFields @["address", "value"] o \oF ->
-                  (oF.address #== daoFeeReceiver)
-                    #&& pand'List
-                      [ pvalueOf # oF.value # pcommittedSymbol # pcommittedToken #>= daoCommittedOut
-                      , padaOf # oF.value #>= daoAdaFromCollateral
-                      , -- Ada and the committed token
-                        pcountOfUniqueTokensWithOverlap pcommittedSymbol oF.value #== 2
-                      ] -- TODO: rechech exact oil flow
-              )
-            # outputs
-        , -- The owner is compensated, TODO: use index from redeemer
-          pany
-            # plam
-              ( \o -> pletFields @["address", "value"] o \oF ->
-                  (oF.address #== launchOwner)
-                    #&& pand'List
-                      [ pif
-                          (pisAda # pcommittedSymbol)
-                          (padaOf # oF.value #>= ownerAda + launchOwnerCommittedOut)
-                          ( pand'List
-                              [ pvalueOf # oF.value # pcommittedSymbol # pcommittedToken #== launchOwnerCommittedOut
-                              , padaOf # oF.value #>= ownerAda
-                              ]
-                          )
-                      , -- Ada and the committed token
-                        pcountOfUniqueTokensWithOverlap pcommittedSymbol oF.value #== 2
+        , -- The DAO is compensated
+          pletFields @["value", "address"] (pelemAt # daoCompensationIndex # outputs) \daoCompensation ->
+            pand'List
+              [ daoCompensation.address #== daoFeeReceiver
+              , pvalueOf # daoCompensation.value # pcommittedSymbol # pcommittedToken #>= daoCommittedOut
+              , -- TODO: rechech exact oil flow
+                padaOf # daoCompensation.value #>= daoAdaFromCollateral
+              , -- Ada and the committed token
+                pcountOfUniqueTokensWithOverlap pcommittedSymbol daoCompensation.value #== 2
+              ]
+        , -- The owner is compensated
+          pletFields @["value", "address"] (pelemAt # ownerCompensationIndex # outputs) \ownerCompensation ->
+            pand'List
+              [ ownerCompensation.address #== launchOwner
+              , -- TODO: rechech exact oil flow
+                pif
+                  (pisAda # pcommittedSymbol)
+                  (padaOf # ownerCompensation.value #>= ownerAda + launchOwnerCommittedOut)
+                  ( pand'List
+                      [ pvalueOf # ownerCompensation.value # pcommittedSymbol # pcommittedToken #== launchOwnerCommittedOut
+                      , padaOf # ownerCompensation.value #>= ownerAda
                       ]
-              )
-            # outputs
+                  )
+              , -- Ada and the committed token
+                pcountOfUniqueTokensWithOverlap pcommittedSymbol ownerCompensation.value #== 2
+              ]
         ]
 
 pcheckMiddleRewardsFold ::

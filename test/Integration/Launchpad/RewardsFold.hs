@@ -319,6 +319,8 @@ rewardsFoldOverTx
                   0
                   rewardsFoldIndex
                   tokensHolderIndex
+                  0 -- TODO: fix
+                  0 -- TODO: fix
               )
               oldRewardsFoldDatum
            , spendScriptRef
