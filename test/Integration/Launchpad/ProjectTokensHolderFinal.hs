@@ -66,7 +66,9 @@ spendHolderCreatePool action config@LaunchpadConfig {..} wallet signer = do
 
   holderUtxos <- boxAt (projectTokensHolderFinalValidator config)
   -- TODO: allow for two holders
-  let holderUtxo = head holderUtxos
+  let holderUtxo = case holderUtxos of
+        h : _ -> h
+        [] -> error "spendHolderCreatePool: no holder utxos"
       holderValue = txBoxValue holderUtxo
 
   lower <- actualTime
@@ -146,19 +148,7 @@ spendHolderCreatePool action config@LaunchpadConfig {..} wallet signer = do
 createMockFactoryTx :: Tx
 createMockFactoryTx = mconcat [payToScript mockFactoryScript (InlineDatum ()) mempty]
 
-spendHolderCreatePoolTx ::
-  MaliciousTokensHolderAction ->
-  LaunchpadConfig ->
-  UserSpend ->
-  TxOutRef ->
-  [TxBox (TypedValidator Dex PTHF.TokensHolderFinalRedeemer)] ->
-  VestingDatum ->
-  Value ->
-  Value ->
-  Value ->
-  Value ->
-  Value ->
-  Tx
+spendHolderCreatePoolTx :: MaliciousTokensHolderAction -> LaunchpadConfig -> UserSpend -> TxOutRef -> [TxBox (TypedValidator Dex PTHF.TokensHolderFinalRedeemer)] -> VestingDatum -> Value -> Value -> Value -> Value -> Value -> Tx
 spendHolderCreatePoolTx
   action
   config@LaunchpadConfig {wrPoolValidatorHash, projectToken, raisingToken}
@@ -171,7 +161,9 @@ spendHolderCreatePoolTx
   poolToken
   poolShares
   vestingValue = do
-    let holderUtxo = head holderUtxos
+    let holderUtxo = case holderUtxos of
+          h : _ -> h
+          [] -> error "no holder utxos in spendHolderCreatePoolTx"
         otherHolderUtxo = holderUtxos !! 1
 
     -- NOTE: doesn't actually run the DEX-side validation

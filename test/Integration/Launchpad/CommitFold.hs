@@ -112,7 +112,9 @@ commitFoldOverTx config wallet commitFoldUtxos resultingDatum nodeUtxos action =
           (scriptHashToTokenName (toValidatorHash (commitFoldValidator config)))
           1
 
-    commitFoldUtxo = head commitFoldUtxos
+    commitFoldUtxo = case commitFoldUtxos of
+      h : _ -> h
+      [] -> error "commitFoldOverTx: no commit fold utxos"
     commitFoldUtxo2 = commitFoldUtxos !! 1
 
     oldDatum = txOutputDatum (snd commitFoldUtxo)

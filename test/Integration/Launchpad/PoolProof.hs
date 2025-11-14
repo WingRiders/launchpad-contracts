@@ -78,7 +78,9 @@ createPoolProof action config@LaunchpadConfig {wrPoolValidatorHash} wallet = do
   utxos <- case action of
     IncorrectPoolHash -> utxoAt (TypedValidatorHash @WrPoolConstantProductDatum (toV2 maliciousScriptHash))
     _ -> utxoAt (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash))
-  let (txOutRef, _) = head utxos
+  let (txOutRef, _) = case utxos of
+        h : _ -> h
+        [] -> error "createPoolProof: no pool proof utxos"
 
   tx <- signTx wallet $ createPoolProofTx action config txOutRef
   void $ sendTx tx

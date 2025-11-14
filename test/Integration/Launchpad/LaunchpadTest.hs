@@ -83,8 +83,9 @@ completeTests = askOption \(ThoroughTests thourough) ->
               "Whole launchpad flow - No Pool - contribution end time = withdrawal end time"
               (run_launchpad NoPool)
           , good defaultLaunchpadConfig {projectMinCommitment = 80001} "Whole launchpad flow - Fail Launchpad" (run_launchpad Fails)
-          , good defaultLaunchpadConfig {collateral = 0} "Whole launchpad flow - No Pool - 0 ADA collateral" (run_launchpad NoPool)
-          , good defaultLaunchpadConfig {collateral = 0} "Whole launchpad flow - Pool Exists - 0 ADA collateral" (run_launchpad PoolExists)
+          , -- NOTE: the min supported collateral is 4 ada
+            good defaultLaunchpadConfig {collateral = 4_000_000} "Whole launchpad flow - No Pool - 4 ADA collateral" (run_launchpad NoPool)
+          , good defaultLaunchpadConfig {collateral = 4_000_000} "Whole launchpad flow - Pool Exists - 4 ADA collateral" (run_launchpad PoolExists)
           ]
 
 cancel_launchpad :: (MaliciousLaunchpadAction, MaliciousLaunchpadAction) -> LaunchpadConfig -> Run ()

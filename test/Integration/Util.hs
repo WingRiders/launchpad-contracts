@@ -57,11 +57,11 @@ import Test.Util (
  )
 import Prelude
 
-ensureTx :: HasCallStack => PubKeyHash -> Tx -> Run ()
+ensureTx :: PubKeyHash -> Tx -> Run ()
 ensureTx submitter tx =
   signTx submitter tx >>= sendTx >>= \case
     Right _ -> pure ()
-    Left e -> error $ show e
+    Left e -> fail $ show e
 
 data AddToken = AddToken | SkipToken
 

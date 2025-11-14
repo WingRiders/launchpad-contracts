@@ -18,6 +18,7 @@ import Launchpad.Mint.RewardsFold (rewardsFoldMintingPolicySymbol)
 import Launchpad.Types
 import Plutarch.Extra.ScriptContext (scriptHashToTokenName)
 import Plutus.Model
+import Plutus.Util (adaAssetClass)
 import PlutusLedgerApi.V1.Value (AssetClass (..), assetClassValue, valueOf)
 import PlutusLedgerApi.V1.Value qualified as V
 import PlutusLedgerApi.V1.Value qualified as Value
@@ -161,6 +162,7 @@ createRewardsFoldTx config usp datum value =
     ]
 
 data RewardsFoldIteration = LastNode | NotLastNode
+  deriving (Show)
 
 rewardsFoldOver :: LaunchpadConfig -> PubKeyHash -> RewardsFoldApplicationConfig -> Run ()
 rewardsFoldOver config wallet RewardsFoldApplicationConfig {..} = do
@@ -272,7 +274,6 @@ nodeReward config differentStakingCredentialReward rewardsFold (nodeOut, node) a
     AssetClass (projectSymbol, projectToken) = config.projectToken
     AssetClass (raisingSymbol, raisingToken) = config.raisingToken
 
--- TODO: that is definitely incorrect in the final iteration
 rewardsFoldOverTx ::
   LaunchpadConfig ->
   RewardsFoldIteration ->
@@ -301,163 +302,266 @@ rewardsFoldOverTx
   resultingDatum
   nodeUtxos
   (stealedIndex, stealedRewards)
-  wallet =
-    mconcat $
-      map
-        (\((ref, _), node, _) -> spendScriptRef nodeRefScript (nodeValidator config) ref (DelegateToRewardsFold rewardsFoldIndex) node)
-        nodeUtxos
-        <> [ spendScriptRef
-              rewardsFoldRefScript
-              (rewardsFoldValidator config)
-              rewardsFoldRef
-              ( RewardsFold
-                  (map (\(_, _, i) -> i) nodeUtxos)
-                  -- shifted by 3:
-                  -- 0th index is the rewards fold or the commit fold compensation
-                  -- 1st index is the tokens holder
-                  -- 2nd index is the rewards fold owner claiming the fold fee
-                  (map (+ 3) rewardIndices)
-                  0
-                  rewardsFoldIndex
-                  tokensHolderIndex
-                  0 -- TODO: fix
-                  0 -- TODO: fix
-              )
-              oldRewardsFoldDatum
-           , spendScriptRef
-              firstTokensHolderRefScript
-              (projectTokensHolderFirstValidator config)
-              firstTokensHolderRef
-              DelegateToRewardsOrFailure
-              (txOutputDatum firstTokensHolderOut)
-           , case iteration of
-              NotLastNode ->
-                payToScript
-                  (rewardsFoldValidator config)
-                  (InlineDatum newRewardsFoldDatum)
-                  (adaValue (commitFoldFeeAdaAmount * fromIntegral (length nodeUtxos)) <> txOutValue rewardsFoldOut)
-              LastNode ->
-                ( payToKey
-                    (if omitCommitFoldCompensation then config.daoFeeReceiver else commitFoldOwner)
-                    ( adaValue (commitFoldFeeAdaAmount * fromIntegral (length nodeUtxos))
-                        <> ada (adaOf (txOutValue rewardsFoldOut))
-                    )
-                )
-                  <> mintValue
-                    (rewardsFoldMintingPolicy config)
-                    ()
-                    ( singleton
-                        (rewardsFoldMintingPolicySymbol (rewardsFoldPolicyConfig config))
-                        (scriptHashToTokenName (toValidatorHash (rewardsFoldValidator config)))
-                        (-1)
-                    )
-                  <> mintValue
-                    (projectTokensHolderMintingPolicy config)
-                    ()
-                    ( singleton
-                        (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config))
-                        (scriptHashToTokenName (toValidatorHash (projectTokensHolderFirstValidator config)))
-                        (-1)
-                    )
-           , case iteration of
-              NotLastNode ->
-                if differentStakingCredentialHolder
-                  then
-                    payToScript
-                      (appendStakingCredential mockStakingCredential (projectTokensHolderFirstValidator config))
-                      (InlineDatum (txOutputDatum firstTokensHolderOut))
-                      ( txOutValue firstTokensHolderOut
-                          <> assetClassValue config.raisingToken collectedCommitted
-                          <> memptyIfZero (singleton projectSymbol projectToken (-distributedRewards))
-                      )
-                  else
-                    payToScript
-                      (projectTokensHolderFirstValidator config)
-                      (InlineDatum (txOutputDatum firstTokensHolderOut))
-                      ( txOutValue firstTokensHolderOut
-                          <> assetClassValue config.raisingToken collectedCommitted
-                          <> memptyIfZero (singleton projectSymbol projectToken (-distributedRewards))
-                      )
-              LastNode ->
-                if differentStakingCredentialHolder
-                  then
-                    payToScript
-                      (appendStakingCredential mockStakingCredential (projectTokensHolderFinalValidator config))
-                      (InlineDatum Wr)
-                      ( txOutValue firstTokensHolderOut
-                          <> assetClassValue config.raisingToken collectedCommitted
-                          <> memptyIfZero (singleton projectSymbol projectToken (-distributedRewards))
-                          <> singleton
-                            (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config))
-                            (scriptHashToTokenName (toValidatorHash (projectTokensHolderFirstValidator config)))
-                            (-1)
-                      )
-                  else
-                    payToScript
-                      (projectTokensHolderFinalValidator config)
-                      (InlineDatum Wr)
-                      ( txOutValue firstTokensHolderOut
-                          <> assetClassValue config.raisingToken collectedCommitted
-                          <> memptyIfZero (singleton projectSymbol projectToken (-distributedRewards))
-                          <> ( singleton
-                                (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config))
-                                (scriptHashToTokenName (toValidatorHash (projectTokensHolderFirstValidator config)))
-                                (-1)
-                             )
-                      )
-           , -- that is the rewards fold fee
-             payToKey
-              wallet
-              ( adaValue (rewardsFoldFeeAdaAmount * fromIntegral (length nodeUtxos))
-                  -- leftover ADA from separator nodes
-                  <> adaValue (oilAdaAmount * fromIntegral (separatorNodes))
-                  <> stealedRewards
-                  <> if burnNodeTokens then mempty else (inv burnedNodeTokens)
-              )
-           , if burnNodeTokens then memptyIf V.isZero burnedNodeTokens (mintValue (nodeMintingPolicy config) ()) else mempty
-           ]
-        <> map (maybe mempty fst) rewards
-    where
-      commitFoldOwner = oldRewardsFoldDatum.commitFoldOwner
-
-      AssetClass (projectSymbol, projectToken) = config.projectToken
-
-      distributedRewards = sum (map (maybe 0 snd) rewards)
-      rewards =
-        zipWith
-          ( \((_, out), node, _) i ->
-              nodeReward config differentStakingCredentialReward oldRewardsFoldDatum (out, node) (if i == stealedIndex then stealedRewards else mempty)
+  wallet = case iteration of
+    NotLastNode ->
+      mconcat $
+        map
+          ( \((ref, _), node, _) ->
+              spendScriptRef
+                nodeRefScript
+                (nodeValidator config)
+                ref
+                (DelegateToRewardsFold rewardsFoldIndex)
+                node
           )
           nodeUtxos
-          [0 ..]
-      rewardIndices = calculateRewardIndices rewards
-      separatorNodes = length $ filter (== (-4)) rewardIndices
-      burnedNodeTokens =
-        mconcat $
-          map
-            ( const
-                ( singleton
-                    (scriptCurrencySymbol (nodeMintingPolicy config))
-                    (scriptHashToTokenName (toValidatorHash (nodeValidator config)))
-                    (-1)
+          <> [ spendScriptRef
+                rewardsFoldRefScript
+                (rewardsFoldValidator config)
+                rewardsFoldRef
+                ( RewardsFold
+                    (map (\(_, _, i) -> i) nodeUtxos)
+                    -- shifted by 3:
+                    -- 0th index is the rewards fold or the commit fold compensation
+                    -- 1st index is the tokens holder
+                    -- 2nd index is the rewards fold owner claiming the fold fee
+                    (map (+ 3) rewardIndices)
+                    0 -- ignored
+                    rewardsFoldIndex
+                    tokensHolderIndex
+                    0 -- ignored
+                    0 -- ignored
                 )
+                oldRewardsFoldDatum
+             , spendScriptRef
+                firstTokensHolderRefScript
+                (projectTokensHolderFirstValidator config)
+                firstTokensHolderRef
+                DelegateToRewardsOrFailure
+                (txOutputDatum firstTokensHolderOut)
+             , payToScript
+                (rewardsFoldValidator config)
+                (InlineDatum newRewardsFoldDatum)
+                (adaValue (commitFoldFeeAdaAmount * fromIntegral (length nodeUtxos)) <> txOutValue rewardsFoldOut)
+             , if differentStakingCredentialHolder
+                then
+                  payToScript
+                    (appendStakingCredential mockStakingCredential (projectTokensHolderFirstValidator config))
+                    (InlineDatum (txOutputDatum firstTokensHolderOut))
+                    ( txOutValue firstTokensHolderOut
+                        <> assetClassValue config.raisingToken collectedCommitted
+                        <> memptyIfZero (singleton projectSymbol projectToken (-distributedRewards))
+                    )
+                else
+                  payToScript
+                    (projectTokensHolderFirstValidator config)
+                    (InlineDatum (txOutputDatum firstTokensHolderOut))
+                    ( txOutValue firstTokensHolderOut
+                        <> assetClassValue config.raisingToken collectedCommitted
+                        <> memptyIfZero (singleton projectSymbol projectToken (-distributedRewards))
+                    )
+             , -- that is the rewards fold fee
+               payToKey
+                wallet
+                ( adaValue (rewardsFoldFeeAdaAmount * fromIntegral (length nodeUtxos))
+                    -- leftover ADA from separator nodes
+                    <> adaValue (oilAdaAmount * fromIntegral (separatorNodes))
+                    <> stealedRewards
+                    <> if burnNodeTokens then mempty else (inv burnedNodeTokens)
+                )
+             , if burnNodeTokens then memptyIf V.isZero burnedNodeTokens (mintValue (nodeMintingPolicy config) ()) else mempty
+             ]
+          <> map (maybe mempty fst) rewards
+      where
+        AssetClass (projectSymbol, projectToken) = config.projectToken
+        distributedRewards = sum (map (maybe 0 snd) rewards)
+        rewards =
+          zipWith
+            ( \((_, out), node, _) i ->
+                nodeReward config differentStakingCredentialReward oldRewardsFoldDatum (out, node) (if i == stealedIndex then stealedRewards else mempty)
             )
             nodeUtxos
-      collectedCommitted =
-        countCommitted
-          oldRewardsFoldDatum.cutoffTime
-          oldRewardsFoldDatum.cutoffKey
-          oldRewardsFoldDatum.overcommitted
-          (map (\(_, node, _) -> node) nodeUtxos)
-      lastNode = (\(_, node, _) -> node) . last . sortOn (\(_, node, _) -> node) $ nodeUtxos
-      oldRewardsFoldDatum = txOutputDatum rewardsFoldOut
-      newRewardsFoldDatum = case resultingDatum of
-        Just d -> d
-        Nothing -> (oldRewardsFoldDatum :: RewardsFoldDatum) {next = lastNode.next}
+            [0 ..]
+        rewardIndices = calculateRewardIndices rewards
+        -- We use negative indices for separator nodes, they don't get rewards
+        separatorNodes = length $ filter (< 0) rewardIndices
+        burnedNodeTokens =
+          mconcat $
+            map
+              ( const
+                  ( singleton
+                      (scriptCurrencySymbol (nodeMintingPolicy config))
+                      (scriptHashToTokenName (toValidatorHash (nodeValidator config)))
+                      (-1)
+                  )
+              )
+              nodeUtxos
+        collectedCommitted =
+          countCommitted
+            oldRewardsFoldDatum.cutoffTime
+            oldRewardsFoldDatum.cutoffKey
+            oldRewardsFoldDatum.overcommitted
+            (map (\(_, node, _) -> node) nodeUtxos)
+        lastNode = (\(_, node, _) -> node) . last . sortOn (\(_, node, _) -> node) $ nodeUtxos
+        oldRewardsFoldDatum = txOutputDatum rewardsFoldOut
+        newRewardsFoldDatum = case resultingDatum of
+          Just d -> d
+          Nothing -> (oldRewardsFoldDatum :: RewardsFoldDatum) {next = lastNode.next}
+    LastNode ->
+      mconcat $
+        map
+          ( \((ref, _), node, _) ->
+              spendScriptRef
+                nodeRefScript
+                (nodeValidator config)
+                ref
+                (DelegateToRewardsFold rewardsFoldIndex)
+                node
+          )
+          nodeUtxos
+          <> [ spendScriptRef
+                rewardsFoldRefScript
+                (rewardsFoldValidator config)
+                rewardsFoldRef
+                ( RewardsFold
+                    (map (\(_, _, i) -> i) nodeUtxos)
+                    -- shifted by 5:
+                    -- 0th index is the rewards fold or the commit fold compensation
+                    -- 1st index is the tokens holder
+                    -- 2nd index is the rewards fold owner claiming the fold fee
+                    -- 3rd index is the dao compensation
+                    -- 4th index is the owner compensation
+                    (map (+ 5) rewardIndices)
+                    0
+                    rewardsFoldIndex
+                    tokensHolderIndex
+                    3
+                    4
+                )
+                oldRewardsFoldDatum
+             , spendScriptRef
+                firstTokensHolderRefScript
+                (projectTokensHolderFirstValidator config)
+                firstTokensHolderRef
+                DelegateToRewardsOrFailure
+                (txOutputDatum firstTokensHolderOut)
+             , -- Commit fold compensation, oil from rewards fold
+               payToKey
+                (if omitCommitFoldCompensation then config.daoFeeReceiver else commitFoldOwner)
+                ( adaValue (commitFoldFeeAdaAmount * fromIntegral (length nodeUtxos))
+                    <> ada (adaOf (txOutValue rewardsFoldOut))
+                )
+                <> mintValue
+                  (rewardsFoldMintingPolicy config)
+                  ()
+                  ( singleton
+                      (rewardsFoldMintingPolicySymbol (rewardsFoldPolicyConfig config))
+                      (scriptHashToTokenName (toValidatorHash (rewardsFoldValidator config)))
+                      (-1)
+                  )
+                <> mintValue
+                  (projectTokensHolderMintingPolicy config)
+                  ()
+                  ( singleton
+                      (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config))
+                      (scriptHashToTokenName (toValidatorHash (projectTokensHolderFirstValidator config)))
+                      (-1)
+                  )
+             , -- Final project tokens holder, oil from tokens holder
+               if differentStakingCredentialHolder
+                then
+                  payToScript
+                    (appendStakingCredential mockStakingCredential (projectTokensHolderFinalValidator config))
+                    (InlineDatum Wr)
+                    ( assetClassValue config.raisingToken tokensHoldersCommittedOut
+                        <> assetClassValue config.projectToken totalProjectOut
+                        <> adaValue oilAdaAmount
+                    )
+                else
+                  payToScript
+                    (projectTokensHolderFinalValidator config)
+                    (InlineDatum Wr)
+                    ( assetClassValue config.raisingToken tokensHoldersCommittedOut
+                        <> assetClassValue config.projectToken totalProjectOut
+                        <> adaValue oilAdaAmount
+                    )
+             , -- that is the rewards fold fee, oil from owner's collateral
+               payToKey
+                wallet
+                ( adaValue (rewardsFoldFeeAdaAmount * fromIntegral (length nodeUtxos))
+                    -- leftover ADA from separator nodes
+                    <> adaValue (oilAdaAmount * fromIntegral (separatorNodes))
+                    <> stealedRewards
+                    <> if burnNodeTokens then mempty else (inv burnedNodeTokens)
+                )
+             , if burnNodeTokens then memptyIf V.isZero burnedNodeTokens (mintValue (nodeMintingPolicy config) ()) else mempty
+             , -- DAO compensation
+               payToKey config.daoFeeReceiver $
+                assetClassValue config.raisingToken daoCommittedOut <> adaValue oilAdaAmount
+             , -- Owner compensation
+               payToKey config.owner $
+                assetClassValue config.raisingToken launchOwnerCommittedOut
+                  <> adaValue
+                    ( config.collateral
+                        - oilAdaAmount -- to dao
+                        - oilAdaAmount -- to the tokens holder
+                    )
+             ]
+          <> map (maybe mempty fst) rewards
+      where
+        totalProjectOut =
+          Value.assetClassValueOf (txOutValue firstTokensHolderOut) config.projectToken - distributedRewards
+        -- TODO: wr/sundae split
+
+        collateralCommittedOut =
+          if config.raisingToken == adaAssetClass then config.collateral else 0
+        totalCommittedOut =
+          collectedCommitted
+            + Value.assetClassValueOf (txOutValue firstTokensHolderOut) config.raisingToken
+            - collateralCommittedOut
+        daoCommittedOut = (config.daoFeeUnits * totalCommittedOut) `div` config.daoFeeBase
+        restCommittedOut = totalCommittedOut - daoCommittedOut
+        tokensHoldersCommittedOut = (restCommittedOut * config.raisedTokensPoolPartPercentage) `div` 100
+        launchOwnerCommittedOut = restCommittedOut - tokensHoldersCommittedOut
+        -- TODO: wr/sundae split
+
+        commitFoldOwner = oldRewardsFoldDatum.commitFoldOwner
+        distributedRewards = sum (map (maybe 0 snd) rewards)
+        rewards =
+          zipWith
+            ( \((_, out), node, _) i ->
+                nodeReward config differentStakingCredentialReward oldRewardsFoldDatum (out, node) (if i == stealedIndex then stealedRewards else mempty)
+            )
+            nodeUtxos
+            [0 ..]
+        rewardIndices = calculateRewardIndices rewards
+        -- We use negative indices for separator nodes, they don't get rewards
+        separatorNodes = length $ filter (< 0) rewardIndices
+        burnedNodeTokens =
+          mconcat $
+            map
+              ( const
+                  ( singleton
+                      (scriptCurrencySymbol (nodeMintingPolicy config))
+                      (scriptHashToTokenName (toValidatorHash (nodeValidator config)))
+                      (-1)
+                  )
+              )
+              nodeUtxos
+        collectedCommitted =
+          countCommitted
+            oldRewardsFoldDatum.cutoffTime
+            oldRewardsFoldDatum.cutoffKey
+            oldRewardsFoldDatum.overcommitted
+            (map (\(_, node, _) -> node) nodeUtxos)
+        oldRewardsFoldDatum = txOutputDatum rewardsFoldOut
 
 calculateRewardIndices :: [Maybe (Tx, Integer)] -> [Integer]
 calculateRewardIndices rewards = snd $ foldl go (0, []) rewards
   where
     go (i, acc) r = case r of
-      Nothing -> (i, acc ++ [-4])
+      -- Separator nodes need to get negative indices
+      -- We also shift the results around based on how many other outputs we have
+      -- That's why we have this -100
+      Nothing -> (i, acc ++ [-100])
       Just _ -> (i + 1, acc ++ [i])
