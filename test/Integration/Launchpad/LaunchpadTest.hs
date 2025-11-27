@@ -2,7 +2,7 @@
 
 module Integration.Launchpad.LaunchpadTest where
 
-import Control.Monad (forM_)
+import Control.Monad (forM_, when)
 import Data.Default (Default (..))
 import Data.List (sort)
 import Data.Maybe (fromJust)
@@ -14,7 +14,7 @@ import Integration.Launchpad.Launchpad
 import Integration.Launchpad.Node hiding (None)
 import Integration.Launchpad.Node qualified as Node
 import Integration.Launchpad.Options (ThoroughTests (..))
-import Integration.Launchpad.PoolProof (createPoolProof, createWrPoolUTxO)
+import Integration.Launchpad.PoolProof (createPoolProof, createPoolUtxo)
 import Integration.Launchpad.PoolProof qualified as PP
 import Integration.Launchpad.ProjectTokensHolderFinal (spendHolderCreatePool, spendHolderPoolExists)
 import Integration.Launchpad.ProjectTokensHolderFinal qualified as PTHF
@@ -73,7 +73,10 @@ cancelTests = askOption \(ThoroughTests thorough) ->
 completeTests :: TestTree
 completeTests = askOption \(ThoroughTests thourough) ->
   testGroup "Whole Launchpad" $
-    [good defaultLaunchpadConfig "Whole launchpad flow - No Pool" (run_launchpad NoPool)]
+    [ good defaultLaunchpadConfig "Whole launchpad flow - No Pool - Wr" (run_launchpad NoPool)
+    , good defaultLaunchpadConfig {splitBps = 0} "Whole launchpad flow - No Pool - Sundae" (run_launchpad NoPool)
+    , good defaultLaunchpadConfig {splitBps = 5_000} "Whole launchpad flow - No Pool - Wr and Sundae" (run_launchpad NoPool)
+    ]
       <> case thourough of
         False -> []
         True ->
@@ -181,8 +184,15 @@ run_launchpad_fail config nodes launchpadOwner = do
 run_launchpad_pool_exists :: LaunchpadConfig -> Wallets -> [PubKeyHash] -> PubKeyHash -> RewardsFoldApplicationConfig -> Run ()
 run_launchpad_pool_exists config Wallets {..} sortedPkhs admin foldAppConfig = do
   run_launchpad_rewards_fold_phase config foldAppConfig admin
-  createWrPoolUTxO PP.None config poolWrInitWallet
-  createPoolProof PP.None config userWallet1
+
+  when (config.splitBps < 10_000) do
+    -- TOOO: maybe have a failing test
+    fail "With Sundae it's always possible to create a pool"
+
+  when (config.splitBps > 0) do
+    createPoolUtxo PP.None Wr config poolInitWallet
+    createPoolProof PP.None Wr config userWallet1
+
   spendHolderPoolExists PTHF.None config admin launchpadOwner
   forM_ sortedPkhs $ \pkh -> do
     spendRewardsHolder RH.None config pkh
@@ -190,7 +200,14 @@ run_launchpad_pool_exists config Wallets {..} sortedPkhs admin foldAppConfig = d
 run_launchpad_no_pool :: LaunchpadConfig -> [PubKeyHash] -> PubKeyHash -> PubKeyHash -> RewardsFoldApplicationConfig -> Run ()
 run_launchpad_no_pool config sortedPkhs admin launchpadOwner foldAppConfig = do
   run_launchpad_rewards_fold_phase config foldAppConfig admin
-  spendHolderCreatePool PTHF.None config admin launchpadOwner
-  createPoolProof PP.None config admin
+
+  when (config.splitBps > 0) do
+    spendHolderCreatePool PTHF.None Wr config admin launchpadOwner
+    createPoolProof PP.None Wr config admin
+
+  when (config.splitBps < 10_000) do
+    spendHolderCreatePool PTHF.None Sundae config admin launchpadOwner
+    createPoolProof PP.None Sundae config admin
+
   forM_ sortedPkhs $ \pkh -> do
     spendRewardsHolder RH.None config pkh

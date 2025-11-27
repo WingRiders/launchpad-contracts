@@ -3,6 +3,7 @@ module Integration.Launchpad.PoolProof where
 import Data.Functor (void)
 import Integration.Launchpad.Validators
 import Integration.Mock
+import Integration.Util (ensureTx, mockSundaeIdentifier, poolSundaeNftName)
 import Launchpad.Constants qualified as C
 import Launchpad.PoolTypes
 import Launchpad.Types (Dex (..), PoolProofDatum (..))
@@ -16,11 +17,12 @@ import PlutusLedgerApi.V1.Value (
   singleton,
  )
 import PlutusLedgerApi.V2 (
+  CurrencySymbol (..),
   PubKeyHash,
   TxOutRef,
-  Value,
  )
 import Test.Util (vETH)
+import Unit.Launchpad.UtilFunctions (unwrapScriptHash)
 
 data MaliciousPoolProofAction
   = None
@@ -73,25 +75,29 @@ spendPoolProof config wallet = do
         ]
   void $ sendTx tx
 
-createPoolProof :: MaliciousPoolProofAction -> LaunchpadConfig -> PubKeyHash -> Run ()
-createPoolProof action config@LaunchpadConfig {wrPoolValidatorHash} wallet = do
-  utxos <- case action of
-    IncorrectPoolHash -> utxoAt (TypedValidatorHash @WrPoolConstantProductDatum (toV2 maliciousScriptHash))
-    _ -> utxoAt (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash))
+createPoolProof :: MaliciousPoolProofAction -> Dex -> LaunchpadConfig -> PubKeyHash -> Run ()
+createPoolProof action dex config@LaunchpadConfig {wrPoolValidatorHash, sundaePoolScriptHash} wallet = do
+  utxos <- case (dex, action) of
+    (Wr, IncorrectPoolHash) -> utxoAt (TypedValidatorHash @WrPoolConstantProductDatum (toV2 maliciousScriptHash))
+    (Wr, _) -> utxoAt (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash))
+    (Sundae, IncorrectPoolHash) -> utxoAt (TypedValidatorHash @SundaePoolDatum (toV2 maliciousScriptHash))
+    (Sundae, _) -> utxoAt (TypedValidatorHash @SundaePoolDatum (toV2 sundaePoolScriptHash))
   let (txOutRef, _) = case utxos of
         h : _ -> h
-        [] -> error "createPoolProof: no pool proof utxos"
+        [] -> error "createPoolProof: no pool utxos"
 
-  tx <- signTx wallet $ createPoolProofTx action config txOutRef
+  tx <- signTx wallet $ createPoolProofTx action dex config txOutRef
   void $ sendTx tx
 
-createPoolProofTx :: MaliciousPoolProofAction -> LaunchpadConfig -> TxOutRef -> Tx
-createPoolProofTx action config poolWrRef =
+createPoolProofTx :: MaliciousPoolProofAction -> Dex -> LaunchpadConfig -> TxOutRef -> Tx
+createPoolProofTx action dex config poolRef =
   mconcat
     [ case action of
         NoProofValidityToken -> mempty
-        _ -> mintValue (poolProofMintingPolicy config) 0 mintedValue
-    , refInputHash poolWrRef (lpDatum config.projectToken config.raisingToken)
+        _ -> mintValue (poolProofMintingPolicy config) dex mintedValue
+    , case dex of
+        Wr -> refInputHash poolRef (wrDatum config.projectToken config.raisingToken)
+        Sundae -> refInputInline poolRef
     , payToScript (poolProofValidator config) (InlineDatum poolProofDatum) mintedValue
     ]
   where
@@ -127,32 +133,66 @@ createPoolProofTx action config poolWrRef =
           )
           (scriptHashToTokenName (toValidatorHash (poolProofValidator config)))
           1
-    poolProofDatum = PoolProofDatum projectSymbol projectToken raisingSymbol raisingToken Wr
+    poolProofDatum = PoolProofDatum projectSymbol projectToken raisingSymbol raisingToken dex
     AssetClass (projectSymbol, projectToken) = config.projectToken
     AssetClass (raisingSymbol, raisingToken) = config.raisingToken
 
-createWrPoolUTxO :: MaliciousPoolProofAction -> LaunchpadConfig -> PubKeyHash -> Run ()
-createWrPoolUTxO action LaunchpadConfig {projectToken, raisingToken, wrPoolValidatorHash, wrPoolCurrencySymbol} wallet = do
-  let lpValue =
-        assetClassValue adaAssetClass C.poolOilAda
-          <> assetClassValue raisingToken 10_000
-          <> assetClassValue (assetClass wrPoolCurrencySymbol "lpShare") 1_000
-          <> assetClassValue (assetClass wrPoolCurrencySymbol C.lpValidityTokenName) 1
-          <> assetClassValue projectToken 10_000
+createPoolUtxo :: MaliciousPoolProofAction -> Dex -> LaunchpadConfig -> PubKeyHash -> Run ()
+createPoolUtxo
+  action
+  dex
+  LaunchpadConfig
+    { raisingToken
+    , projectToken
+    , wrPoolCurrencySymbol
+    , wrPoolValidatorHash
+    , sundaePoolScriptHash
+    }
+  wallet = do
+    let identifier = mockSundaeIdentifier
+        value = case dex of
+          Wr ->
+            assetClassValue adaAssetClass C.poolOilAda
+              <> assetClassValue raisingToken 10_000
+              <> assetClassValue (assetClass wrPoolCurrencySymbol "lpShare") 1_000
+              <> assetClassValue (assetClass wrPoolCurrencySymbol C.lpValidityTokenName) 1
+              <> assetClassValue projectToken 10_000
+          Sundae ->
+            assetClassValue adaAssetClass C.poolOilAda
+              <> assetClassValue raisingToken 10_000
+              <> singleton (CurrencySymbol (unwrapScriptHash sundaePoolScriptHash)) (poolSundaeNftName identifier) 1
+              <> assetClassValue projectToken 10_000
+        datumForWr = case action of
+          DifferentProjectToken -> wrDatum vETH raisingToken
+          _ -> wrDatum projectToken raisingToken
+        datumForSundae = case action of
+          DifferentProjectToken -> sundaeDatum identifier vETH raisingToken 1_000_000
+          _ -> sundaeDatum identifier projectToken raisingToken 1_000_000
 
-  let poolDatum = case action of
-        DifferentProjectToken -> lpDatum vETH raisingToken
-        _ -> lpDatum projectToken raisingToken
+    usp <- spend wallet value
 
-  usp <- spend wallet lpValue
-  tx <- signTx wallet $ createWrPoolTx action usp wrPoolValidatorHash poolDatum lpValue
-  void $ sendTx tx
-
-createWrPoolTx :: MaliciousPoolProofAction -> UserSpend -> ScriptHash -> WrPoolConstantProductDatum -> Value -> Tx
-createWrPoolTx action usp wrPoolValidatorHash poolDatum val =
-  mconcat
-    [ userSpend usp
-    , case action of
-        IncorrectPoolHash -> payToScript (TypedValidatorHash @WrPoolConstantProductDatum (toV2 maliciousScriptHash)) (InlineDatum poolDatum) val
-        _ -> payToScript (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash)) (InlineDatum poolDatum) val
-    ]
+    ensureTx wallet $
+      mconcat
+        [ userSpend usp
+        , case (dex, action) of
+            (Wr, IncorrectPoolHash) ->
+              payToScript
+                (TypedValidatorHash @WrPoolConstantProductDatum (toV2 maliciousScriptHash))
+                (InlineDatum datumForWr)
+                value
+            (Sundae, IncorrectPoolHash) ->
+              payToScript
+                (TypedValidatorHash @SundaePoolDatum (toV2 maliciousScriptHash))
+                (InlineDatum datumForSundae)
+                value
+            (Wr, _) ->
+              payToScript
+                (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash))
+                (InlineDatum datumForWr)
+                value
+            (Sundae, _) ->
+              payToScript
+                (TypedValidatorHash @SundaePoolDatum (toV2 sundaePoolScriptHash))
+                (InlineDatum datumForSundae)
+                value
+        ]

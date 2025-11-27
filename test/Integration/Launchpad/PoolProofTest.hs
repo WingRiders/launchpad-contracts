@@ -3,6 +3,7 @@ module Integration.Launchpad.PoolProofTest where
 import Integration.Launchpad.PoolProof
 import Integration.Mock
 import Integration.Util
+import Launchpad.Types (Dex (..))
 import Plutus.Model
 import Test.Tasty (
   TestTree,
@@ -52,12 +53,12 @@ spendTests =
 create_pool_proof :: MaliciousPoolProofAction -> LaunchpadConfig -> Run ()
 create_pool_proof action config = do
   Wallets {..} <- setupWallets config
-  createWrPoolUTxO action config poolWrInitWallet
-  createPoolProof action config userWallet2
+  createPoolUtxo action Wr config poolInitWallet
+  createPoolProof action Wr config userWallet2
 
 create_and_spend_pool_proof :: LaunchpadConfig -> Run ()
 create_and_spend_pool_proof config = do
   Wallets {..} <- setupWallets config
-  createWrPoolUTxO None config poolWrInitWallet
-  createPoolProof None config userWallet1
+  createPoolUtxo None Wr config poolInitWallet
+  createPoolProof None Wr config userWallet1
   spendPoolProof config userWallet1

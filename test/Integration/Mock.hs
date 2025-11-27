@@ -22,12 +22,14 @@ import PlutusLedgerApi.V1.Value (
  )
 import PlutusLedgerApi.V2 (
   Address (..),
+  BuiltinByteString,
   Credential (..),
   CurrencySymbol (..),
   POSIXTime,
   PubKeyHash (..),
   ScriptHash (..),
   StakingCredential (..),
+  TokenName (..),
   TxOutRef (..),
   Value,
  )
@@ -42,8 +44,7 @@ import Test.Util (
 
 data LaunchpadConfig = LaunchpadConfig
   { owner :: Address
-  , usesWr :: Bool
-  , usesSundae :: Bool
+  , splitBps :: Integer
   , wrPoolValidatorHash :: ScriptHash
   , wrFactoryValidatorHash :: ScriptHash
   , wrPoolCurrencySymbol :: CurrencySymbol
@@ -93,7 +94,7 @@ data Wallets = Wallets
   { userWallet1 :: PubKeyHash
   , userWallet2 :: PubKeyHash
   , userWallet3 :: PubKeyHash
-  , poolWrInitWallet :: PubKeyHash
+  , poolInitWallet :: PubKeyHash
   , launchpadOwner :: PubKeyHash
   , daoFeeReceiver :: PubKeyHash
   , daoAdmin :: PubKeyHash
@@ -114,7 +115,7 @@ setupWallets config = do
   w1 <- newUser defaultTokens
   w2 <- newUser defaultTokens
   w3 <- newUser defaultTokens
-  poolWrInitWallet <-
+  poolInitWallet <-
     newUser $
       defaultTokens
         <> assetClassValue (assetClass mockWrPoolCurrencySymbol "lpShare") 1_000
@@ -139,7 +140,7 @@ setupWallets config = do
       { userWallet1 = w1
       , userWallet2 = w2
       , userWallet3 = w3
-      , poolWrInitWallet
+      , poolInitWallet
       , launchpadOwner
       , daoFeeReceiver
       , daoAdmin
@@ -148,17 +149,17 @@ setupWallets config = do
 mockStarterRef :: TxOutRef
 mockStarterRef = TxOutRef "f2a51f02852b8ecdc0b5eac198ed33d198b93847566c2c4410fc7e2af6e1148d" 0
 
+mockSundaePoolScriptHash :: ScriptHash
+mockSundaePoolScriptHash = ScriptHash hash
+  where
+    CurrencySymbol hash = freeCurrencySymbol
+
 mockWrPoolValidatorHash :: ScriptHash
 mockWrPoolValidatorHash = "36bea2acff0a1c9376b0fd4137ee46fb0f7acfd173ec071e338f8000"
 
 -- ScriptHash of the mockFactoryScript from Integration.Launchpad.Validators
 mockWrFactoryValidatorHash :: ScriptHash
 mockWrFactoryValidatorHash = "52c6af0c9b744b4eecce838538a52ceb155038b3de68e2bb2fa8fc37"
-
-mockSundaePoolScriptHash :: ScriptHash
-mockSundaePoolScriptHash = ScriptHash hash
-  where
-    CurrencySymbol hash = freeCurrencySymbol
 
 mockWrPoolCurrencySymbol :: CurrencySymbol
 mockWrPoolCurrencySymbol = freeCurrencySymbol
@@ -218,8 +219,7 @@ defaultLaunchpadConfig :: LaunchpadConfig
 defaultLaunchpadConfig =
   LaunchpadConfig
     { owner = Address (PubKeyCredential mockOwnerPkh) Nothing
-    , usesWr = True
-    , usesSundae = False
+    , splitBps = 10_000
     , wrPoolValidatorHash = mockWrPoolValidatorHash
     , wrFactoryValidatorHash = mockWrFactoryValidatorHash
     , wrPoolCurrencySymbol = mockWrPoolCurrencySymbol
@@ -259,8 +259,8 @@ defaultLaunchpadConfig =
     , oilAda = oilAdaAmount
     }
 
-lpDatum :: AssetClass -> AssetClass -> WrPoolConstantProductDatum
-lpDatum projectToken raisingToken =
+wrDatum :: AssetClass -> AssetClass -> WrPoolConstantProductDatum
+wrDatum projectToken raisingToken =
   WrPoolConstantProductDatum
     { requestValidatorHash = mockRequestScriptHash
     , assetASymbol
@@ -286,3 +286,22 @@ lpDatum projectToken raisingToken =
     }
   where
     (AssetClass (assetASymbol, assetAToken), AssetClass (assetBSymbol, assetBToken)) = if projectToken < raisingToken then (projectToken, raisingToken) else (raisingToken, projectToken)
+
+sundaeDatum :: BuiltinByteString -> AssetClass -> AssetClass -> Integer -> SundaePoolDatum
+sundaeDatum identifier projectToken raisingToken circulatingLp =
+  SundaePoolDatum
+    { identifier
+    , assets
+    , circulatingLp
+    , bidFeesPer10Thousand = 35
+    , askFeesPer10Thousand = 35
+    , feeManager = Nothing
+    , marketOpen = 1
+    , protocolFees = 0
+    }
+  where
+    (AssetClass (assetASymbol, assetAToken), AssetClass (assetBSymbol, assetBToken)) =
+      if projectToken < raisingToken
+        then (projectToken, raisingToken)
+        else (raisingToken, projectToken)
+    assets = [[unCurrencySymbol assetASymbol, unTokenName assetAToken], [unCurrencySymbol assetBSymbol, unTokenName assetBToken]]

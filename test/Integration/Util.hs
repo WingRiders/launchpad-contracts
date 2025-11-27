@@ -6,7 +6,7 @@ import Cardano.Simple.Ledger.Tx qualified as Tx
 import Data.List (find)
 import Data.Maybe
 import GHC.Stack (HasCallStack)
-import Integration.Mock (LaunchpadConfig (..), mockWrPoolCurrencySymbol)
+import Integration.Mock (LaunchpadConfig (..), mockSundaeSettingsCurrencySymbol, mockWrPoolCurrencySymbol)
 import Launchpad.CommitFold qualified as C
 import Launchpad.Constants qualified as C
 import Launchpad.FailProof qualified as FP
@@ -28,6 +28,7 @@ import Plutarch.Extra.ScriptContext (scriptHashToTokenName)
 
 import Plutus.Model
 
+import Launchpad.Constants (settingsNftName)
 import PlutusLedgerApi.V1.Address (toPubKeyHash)
 import PlutusLedgerApi.V1.Value (AssetClass (..), CurrencySymbol (..), TokenName (..), assetClass, assetClassValue)
 import PlutusLedgerApi.V1.Value qualified as V
@@ -55,6 +56,7 @@ import Test.Util (
   vSOL,
   vUSDT,
  )
+import Unit.Launchpad.UtilFunctions (unwrapScriptHash)
 import Prelude
 
 ensureTx :: PubKeyHash -> Tx -> Run ()
@@ -92,8 +94,8 @@ memptyIf p b f = if p b then mempty else f b
 memptyIfZero :: Value -> Value
 memptyIfZero value = memptyIf V.isZero value id
 
-shareTokenName :: AssetClass -> AssetClass -> TokenName
-shareTokenName assetA assetB =
+wrShareTokenName :: AssetClass -> AssetClass -> TokenName
+wrShareTokenName assetA assetB =
   TokenName . blake2b_256 $
     blake2b_256 "0"
       <> blake2b_256 (encodeUtf8 "1")
@@ -107,16 +109,30 @@ shareTokenName assetA assetB =
 addressToPubKeyHash :: Address -> PubKeyHash
 addressToPubKeyHash addr = fromJust $ toPubKeyHash addr
 
+-- https://github.com/SundaeSwap-finance/sundae-contracts/blob/be33466b7dbe0f8e6c0e0f46ff23737897f45835/lib/shared.ak#L222
+poolSundaeNftName :: BuiltinByteString -> TokenName
+poolSundaeNftName identifier = TokenName $ "000de140" <> identifier
+
+-- https://github.com/SundaeSwap-finance/sundae-contracts/blob/be33466b7dbe0f8e6c0e0f46ff23737897f45835/lib/shared.ak#L228
+poolSundaeLpName :: BuiltinByteString -> TokenName
+poolSundaeLpName identifier = TokenName $ "0014df10" <> identifier
+
+mockSundaeIdentifier :: BuiltinByteString
+mockSundaeIdentifier = "AAAFFF"
+
 good :: LaunchpadConfig -> String -> (LaunchpadConfig -> Run a) -> TestTree
 good config msg t =
   testNoErrors
     ( adaValue 100_000_000_000_000
+        <> singleton mockSundaeSettingsCurrencySymbol settingsNftName 1
         <> assetClassValue vBTC 100_000_000_000_000
         <> assetClassValue vETH 100_000_000_000_000
         <> assetClassValue vSOL 100_000_000_000_000
         <> assetClassValue vADA 100_000_000_000_000
         <> assetClassValue vUSDT 100_000_000_000_000
         <> assetClassValue vDOGE 100_000_000_000_000
+        <> singleton (CurrencySymbol (unwrapScriptHash config.sundaePoolScriptHash)) (poolSundaeLpName mockSundaeIdentifier) 1_000_000
+        <> singleton (CurrencySymbol (unwrapScriptHash config.sundaePoolScriptHash)) (poolSundaeNftName mockSundaeIdentifier) 1
         <> assetClassValue (assetClass mockWrPoolCurrencySymbol "lpShare") 1_000
         <> assetClassValue (assetClass mockWrPoolCurrencySymbol C.lpValidityTokenName) 1
         -- ProjectTokensHolder Validity Token (in the Admin wallet [getMainUser])
@@ -262,7 +278,7 @@ rewardsFoldConfig lCfg =
     , withdrawalEndTime = lCfg.withdrawalEndTime
     , oilAda = lCfg.oilAda
     , commitFoldFeeAda = lCfg.commitFoldFeeAda
-    , splitBps = 10_000
+    , splitBps = lCfg.splitBps
     , owner = lCfg.owner
     , daoFeeUnits = lCfg.daoFeeUnits
     , daoFeeBase = lCfg.daoFeeBase
@@ -338,6 +354,6 @@ rewardsHolderConfig lCfg =
   RH.RewardsHolderConfig
     { poolProofValidatorHash = poolProofScriptValidatorHash (poolProofConfig lCfg)
     , poolProofSymbol = poolProofMintingPolicySymbol (poolProofPolicyConfig lCfg)
-    , usesWr = lCfg.usesWr
-    , usesSundae = lCfg.usesSundae
+    , usesWr = lCfg.splitBps > 0
+    , usesSundae = lCfg.splitBps < 10_000
     }

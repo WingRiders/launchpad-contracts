@@ -5,9 +5,7 @@ import Data.Functor (void)
 import Integration.Launchpad.Validators
 import Integration.Mock (LaunchpadConfig (LaunchpadConfig, projectToken, raisingToken), oilAdaAmount)
 import Launchpad.Types (
-  Dex (..),
   NodeKey,
-  PoolProofDatum (PoolProofDatum),
   RewardsHolderDatum (..),
  )
 import Plutus.Model
@@ -65,15 +63,22 @@ spendRewardsHolder :: MaliciousRewardsHolderAction -> LaunchpadConfig -> PubKeyH
 spendRewardsHolder action config wallet = do
   rewardsHolderUtxos <- boxAt (rewardsHolderValidator config)
   let holderBoxes = findHolderBoxes wallet rewardsHolderUtxos
-  [(proofRef, _)] <- utxoAt (poolProofValidator config)
+
+  poolProofs <- utxoAt (poolProofValidator config)
 
   tx <- case action of
-    NoOwnerSignature -> signTx maliciousPkh $ spendRewardsHolderTx action config proofRef holderBoxes wallet
-    _ -> signTx wallet $ spendRewardsHolderTx action config proofRef holderBoxes wallet
+    NoOwnerSignature -> signTx maliciousPkh $ spendRewardsHolderTx action config poolProofs holderBoxes wallet
+    _ -> signTx wallet $ spendRewardsHolderTx action config poolProofs holderBoxes wallet
   void $ sendTx tx
 
-spendRewardsHolderTx :: MaliciousRewardsHolderAction -> LaunchpadConfig -> TxOutRef -> [TxBox (TypedValidator RewardsHolderDatum ())] -> PubKeyHash -> Tx
-spendRewardsHolderTx action config@LaunchpadConfig {projectToken, raisingToken} poolProofUtxo holderBoxes wallet =
+spendRewardsHolderTx ::
+  MaliciousRewardsHolderAction ->
+  LaunchpadConfig ->
+  [(TxOutRef, TxOut)] ->
+  [TxBox (TypedValidator RewardsHolderDatum ())] ->
+  PubKeyHash ->
+  Tx
+spendRewardsHolderTx action config poolProofs holderBoxes wallet =
   mconcat $
     map
       (spendBox (rewardsHolderValidator config) ())
@@ -81,10 +86,7 @@ spendRewardsHolderTx action config@LaunchpadConfig {projectToken, raisingToken} 
       <> [ payToKey wallet rewardValue
          , case action of
             NoPoolProof -> mempty
-            _ -> refInputHash poolProofUtxo poolProofDatum
+            _ -> mconcat . map (\(ref, out) -> refInputHash ref (txOutDatum out)) $ poolProofs
          ]
   where
-    poolProofDatum = PoolProofDatum projectCs projectTn raisingCs raisingTn Wr
-    AssetClass (projectCs, projectTn) = projectToken
-    AssetClass (raisingCs, raisingTn) = raisingToken
     rewardValue = foldl' (\acc txBox -> (acc <> txBoxValue txBox)) mempty holderBoxes

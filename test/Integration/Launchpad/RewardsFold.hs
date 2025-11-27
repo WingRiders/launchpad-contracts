@@ -13,6 +13,7 @@ import Integration.Launchpad.Node
 import Integration.Launchpad.Validators
 import Integration.Mock
 import Integration.Util
+import Launchpad.Constants (bpsScalingFactor)
 import Launchpad.Mint.ProjectTokensHolder qualified as PTH
 import Launchpad.Mint.RewardsFold (rewardsFoldMintingPolicySymbol)
 import Launchpad.Types
@@ -24,6 +25,7 @@ import PlutusLedgerApi.V1.Value qualified as V
 import PlutusLedgerApi.V1.Value qualified as Value
 import PlutusLedgerApi.V2 (Datum (..), FromData (..), OutputDatum (..), PubKeyHash (..), ToData (..), TxOut (..), TxOutRef, Value, singleton)
 import PlutusTx.Prelude (inv)
+import Test.Util (divideCeil)
 
 data RewardsFoldApplicationConfig = RewardsFoldApplicationConfig
   { newRewardsDatum :: Maybe RewardsFoldDatum
@@ -297,8 +299,8 @@ rewardsFoldOverTx
   differentStakingCredentialReward
   differentStakingCredentialHolder
   (nodeRefScript, rewardsFoldRefScript, firstTokensHolderRefScript)
-  (rewardsFoldRef, rewardsFoldOut, rewardsFoldIndex)
-  (firstTokensHolderRef, firstTokensHolderOut, tokensHolderIndex)
+  (rewardsFoldRef, rewardsFoldOut, rewardsFoldInputIndex)
+  (firstTokensHolderRef, firstTokensHolderOut, tokensHolderInputIndex)
   resultingDatum
   nodeUtxos
   (stealedIndex, stealedRewards)
@@ -311,7 +313,7 @@ rewardsFoldOverTx
                 nodeRefScript
                 (nodeValidator config)
                 ref
-                (DelegateToRewardsFold rewardsFoldIndex)
+                (DelegateToRewardsFold rewardsFoldInputIndex)
                 node
           )
           nodeUtxos
@@ -327,8 +329,8 @@ rewardsFoldOverTx
                     -- 2nd index is the rewards fold owner claiming the fold fee
                     (map (+ 3) rewardIndices)
                     0 -- ignored
-                    rewardsFoldIndex
-                    tokensHolderIndex
+                    rewardsFoldInputIndex
+                    tokensHolderInputIndex
                     0 -- ignored
                     0 -- ignored
                 )
@@ -415,7 +417,7 @@ rewardsFoldOverTx
                 nodeRefScript
                 (nodeValidator config)
                 ref
-                (DelegateToRewardsFold rewardsFoldIndex)
+                (DelegateToRewardsFold rewardsFoldInputIndex)
                 node
           )
           nodeUtxos
@@ -425,18 +427,19 @@ rewardsFoldOverTx
                 rewardsFoldRef
                 ( RewardsFold
                     (map (\(_, _, i) -> i) nodeUtxos)
-                    -- shifted by 5:
+                    -- shifted by either 5 or 6:
                     -- 0th index is the rewards fold or the commit fold compensation
                     -- 1st index is the tokens holder
-                    -- 2nd index is the rewards fold owner claiming the fold fee
-                    -- 3rd index is the dao compensation
-                    -- 4th index is the owner compensation
-                    (map (+ 5) rewardIndices)
+                    -- 2nd index is the second tokens holder if both dexes are used
+                    -- 2nd/3rd index is the rewards fold owner claiming the fold fee
+                    -- 3rd/4th index is the dao compensation
+                    -- 4th/5th index is the owner compensation
+                    (map (+ shiftIndex) rewardIndices)
                     0
-                    rewardsFoldIndex
-                    tokensHolderIndex
-                    3
-                    4
+                    rewardsFoldInputIndex
+                    tokensHolderInputIndex
+                    daoCompensationOutputIndex
+                    ownerCompensationOutputIndex
                 )
                 oldRewardsFoldDatum
              , spendScriptRef
@@ -467,25 +470,11 @@ rewardsFoldOverTx
                       (scriptHashToTokenName (toValidatorHash (projectTokensHolderFirstValidator config)))
                       (-1)
                   )
-             , -- Final project tokens holder, oil from tokens holder
-               if differentStakingCredentialHolder
-                then
-                  payToScript
-                    (appendStakingCredential mockStakingCredential (projectTokensHolderFinalValidator config))
-                    (InlineDatum Wr)
-                    ( assetClassValue config.raisingToken tokensHoldersCommittedOut
-                        <> assetClassValue config.projectToken totalProjectOut
-                        <> adaValue oilAdaAmount
-                    )
-                else
-                  payToScript
-                    (projectTokensHolderFinalValidator config)
-                    (InlineDatum Wr)
-                    ( assetClassValue config.raisingToken tokensHoldersCommittedOut
-                        <> assetClassValue config.projectToken totalProjectOut
-                        <> adaValue oilAdaAmount
-                    )
-             , -- that is the rewards fold fee, oil from owner's collateral
+             , -- Final project tokens holder, oil from collateral
+               if config.splitBps > 0 then wrFinalProjectTokensHolder else mempty
+             , -- Final project tokens holder, oil from collateral
+               if config.splitBps < 10_000 then sundaeFinalProjectTokensHolder else mempty
+             , -- that is the rewards fold fee
                payToKey
                 wallet
                 ( adaValue (rewardsFoldFeeAdaAmount * fromIntegral (length nodeUtxos))
@@ -504,14 +493,59 @@ rewardsFoldOverTx
                   <> adaValue
                     ( config.collateral
                         - oilAdaAmount -- to dao
-                        - oilAdaAmount -- to the tokens holder
+                        - (if config.splitBps > 0 then oilAdaAmount else 0) -- to the wr tokens holder
+                        - (if config.splitBps < 10_000 then oilAdaAmount else 0) -- to the sundae tokens holder
                     )
              ]
           <> map (maybe mempty fst) rewards
       where
+        wrFinalProjectTokensHolder =
+          if differentStakingCredentialHolder
+            then
+              payToScript
+                (appendStakingCredential mockStakingCredential (projectTokensHolderFinalValidator config))
+                (InlineDatum Wr)
+                ( assetClassValue config.raisingToken wrHolderCommittedOut
+                    <> assetClassValue config.projectToken wrHolderProjectOut
+                    <> adaValue oilAdaAmount
+                )
+            else
+              payToScript
+                (projectTokensHolderFinalValidator config)
+                (InlineDatum Wr)
+                ( assetClassValue config.raisingToken wrHolderCommittedOut
+                    <> assetClassValue config.projectToken wrHolderProjectOut
+                    <> adaValue oilAdaAmount
+                )
+
+        sundaeFinalProjectTokensHolder =
+          if differentStakingCredentialHolder
+            then
+              payToScript
+                (appendStakingCredential mockStakingCredential (projectTokensHolderFinalValidator config))
+                (InlineDatum Sundae)
+                ( assetClassValue config.raisingToken sundaeHolderCommittedOut
+                    <> assetClassValue config.projectToken sundaeHolderProjectOut
+                    <> adaValue oilAdaAmount
+                )
+            else
+              payToScript
+                (projectTokensHolderFinalValidator config)
+                (InlineDatum Sundae)
+                ( assetClassValue config.raisingToken sundaeHolderCommittedOut
+                    <> assetClassValue config.projectToken sundaeHolderProjectOut
+                    <> adaValue oilAdaAmount
+                )
+
+        -- the dao/owner indices shift based on how many dexes are used
+        daoCompensationOutputIndex = 3 + (shiftIndex - 5)
+        ownerCompensationOutputIndex = 4 + (shiftIndex - 5)
+        shiftIndex = 5 + if config.splitBps > 0 && config.splitBps < 10_000 then 1 else 0
+
         totalProjectOut =
           Value.assetClassValueOf (txOutValue firstTokensHolderOut) config.projectToken - distributedRewards
-        -- TODO: wr/sundae split
+        wrHolderProjectOut = divideCeil (totalProjectOut * config.splitBps) bpsScalingFactor
+        sundaeHolderProjectOut = totalProjectOut - wrHolderProjectOut
 
         collateralCommittedOut =
           if config.raisingToken == adaAssetClass then config.collateral else 0
@@ -523,10 +557,12 @@ rewardsFoldOverTx
         restCommittedOut = totalCommittedOut - daoCommittedOut
         tokensHoldersCommittedOut = (restCommittedOut * config.raisedTokensPoolPartPercentage) `div` 100
         launchOwnerCommittedOut = restCommittedOut - tokensHoldersCommittedOut
-        -- TODO: wr/sundae split
+        wrHolderCommittedOut = divideCeil (tokensHoldersCommittedOut * config.splitBps) bpsScalingFactor
+        sundaeHolderCommittedOut = tokensHoldersCommittedOut - wrHolderCommittedOut
 
         commitFoldOwner = oldRewardsFoldDatum.commitFoldOwner
         distributedRewards = sum (map (maybe 0 snd) rewards)
+
         rewards =
           zipWith
             ( \((_, out), node, _) i ->
@@ -535,6 +571,7 @@ rewardsFoldOverTx
             nodeUtxos
             [0 ..]
         rewardIndices = calculateRewardIndices rewards
+
         -- We use negative indices for separator nodes, they don't get rewards
         separatorNodes = length $ filter (< 0) rewardIndices
         burnedNodeTokens =

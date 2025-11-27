@@ -1,6 +1,7 @@
 module Integration.Launchpad.ProjectTokensHolderFinalTest where
 
-import Integration.Launchpad.PoolProof (createPoolProof, createWrPoolUTxO)
+import Control.Monad (when)
+import Integration.Launchpad.PoolProof (createPoolProof, createPoolUtxo)
 import Integration.Launchpad.PoolProof qualified as PP
 import Integration.Launchpad.ProjectTokensHolderFinal (
   MaliciousTokensHolderAction (..),
@@ -10,6 +11,7 @@ import Integration.Launchpad.ProjectTokensHolderFinal (
  )
 import Integration.Mock
 import Integration.Util
+import Launchpad.Types (Dex (..))
 import Plutus.Model
 import Test.Tasty (
   TestTree,
@@ -44,8 +46,8 @@ lock_to_pool action config = do
   Wallets {..} <- setupWallets config
   adminWallet <- getMainUser
 
-  createProjectTokensHolderFinal config 1_000_000 adminWallet
-  spendHolderCreatePool action config adminWallet launchpadOwner
+  createProjectTokensHolderFinal config Wr 1_000_000 adminWallet
+  spendHolderCreatePool action Wr config adminWallet launchpadOwner
 
 spendTestsPoolExists :: [TestTree]
 spendTestsPoolExists =
@@ -65,17 +67,18 @@ move_funds_to_dao action config = do
         WrongPoolProof -> config {projectToken = vETH}
         _ -> config
 
-  createWrPoolUTxO PP.None poolConfig poolWrInitWallet
-  createPoolProof PP.None poolConfig userWallet2
-  createProjectTokensHolderFinal config 1_000_000 adminWallet
-  spendHolderPoolExists action config adminWallet launchpadOwner
+  when (config.splitBps > 0) $ do
+    createPoolUtxo PP.None Wr poolConfig poolInitWallet
+    createPoolProof PP.None Wr poolConfig userWallet2
+    createProjectTokensHolderFinal config Wr 1_000_000 adminWallet
+    spendHolderPoolExists action config adminWallet launchpadOwner
 
 double_spend_two_token_holders :: LaunchpadConfig -> Run ()
 double_spend_two_token_holders config = do
   Wallets {..} <- setupWallets config
   adminWallet <- getMainUser
 
-  createProjectTokensHolderFinal config 1_000_000 adminWallet
-  createProjectTokensHolderFinal config 1_000_000 adminWallet
+  createProjectTokensHolderFinal config Wr 1_000_000 adminWallet
+  createProjectTokensHolderFinal config Wr 1_000_000 adminWallet
 
-  spendHolderCreatePool DoubleSatisfy config adminWallet launchpadOwner
+  spendHolderCreatePool DoubleSatisfy Wr config adminWallet launchpadOwner

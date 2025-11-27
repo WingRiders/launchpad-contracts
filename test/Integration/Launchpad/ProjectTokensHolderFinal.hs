@@ -1,12 +1,12 @@
 module Integration.Launchpad.ProjectTokensHolderFinal where
 
-import Control.Monad (void)
+import Control.Monad (when)
 import Integration.Launchpad.Validators
 import Integration.Mock
 import Integration.Util
 import Integration.Vesting (vestingValidator)
 import Launchpad.Constants qualified as C
-import Launchpad.PoolTypes (WrPoolConstantProductDatum (..))
+import Launchpad.PoolTypes (SundaePoolDatum, SundaeSettingsDatum (..), WrPoolConstantProductDatum (..))
 import Launchpad.ProjectTokensHolderFinal qualified as PTHF
 import Launchpad.Types (Dex (..), PoolProofDatum (..))
 import Other.Vesting (VestingDatum (..))
@@ -14,9 +14,10 @@ import Plutus.Model
 import PlutusLedgerApi.V1.Address (pubKeyHashAddress)
 import PlutusLedgerApi.V1.Interval (interval)
 import PlutusLedgerApi.V1.Value (assetClassValue, assetClassValueOf)
-import PlutusLedgerApi.V2 (PubKeyHash, TxOutRef, Value, singleton)
+import PlutusLedgerApi.V2 (CurrencySymbol (..), PubKeyHash, Value, singleton, toBuiltinData)
 import PlutusTx.Prelude (inv)
 import Test.Util (vUSDT)
+import Unit.Launchpad.UtilFunctions (unwrapScriptHash)
 
 data MaliciousTokensHolderAction
   = None
@@ -38,46 +39,79 @@ data MaliciousTokensHolderAction
 maliciousPkh :: PubKeyHash
 maliciousPkh = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"
 
-createProjectTokensHolderFinal :: LaunchpadConfig -> Integer -> PubKeyHash -> Run ()
-createProjectTokensHolderFinal config@LaunchpadConfig {projectToken, raisingToken, totalTokens, tokensToDistribute} raised wallet = do
-  let value =
-        assetClassValue projectToken (totalTokens - tokensToDistribute)
-          <> assetClassValue raisingToken raised
-  -- Incorrect, but we must have at least something here, like 2 ada?
-  -- <> assetClassValue adaAssetClass config.collateral
+createProjectTokensHolderFinal :: LaunchpadConfig -> Dex -> Integer -> PubKeyHash -> Run ()
+createProjectTokensHolderFinal
+  config@LaunchpadConfig {projectToken, raisingToken, totalTokens, tokensToDistribute}
+  dex
+  raised
+  wallet = do
+    let value =
+          assetClassValue projectToken (totalTokens - tokensToDistribute)
+            <> assetClassValue raisingToken raised
+    -- Incorrect, but we must have at least something here, like 2 ada?
+    -- <> assetClassValue adaAssetClass config.collateral
 
-  usp <- spend wallet value
-  tx <- signTx wallet $ createProjectTokensHolderFinalTx config usp value
-  void $ sendTx tx
+    usp <- spend wallet value
+    let tx =
+          mconcat
+            [ userSpend usp
+            , payToScript (projectTokensHolderFinalValidator config) (InlineDatum dex) value
+            ]
+    ensureTx wallet tx
 
-createProjectTokensHolderFinalTx :: LaunchpadConfig -> UserSpend -> Value -> Tx
-createProjectTokensHolderFinalTx config usp val =
-  mconcat
-    [ userSpend usp
-    , payToScript (projectTokensHolderFinalValidator config) (InlineDatum Wr) val
-    ]
+mockSettingsDatum :: SundaeSettingsDatum
+mockSettingsDatum =
+  SundaeSettingsDatum
+    { _settingsAdmin = toBuiltinData ()
+    , _metadataAdmin = toBuiltinData ()
+    , _treasuryAdmin = toBuiltinData ()
+    , _treasuryAddress = toBuiltinData ()
+    , _treasuryAllowance = toBuiltinData ()
+    , _authorizedScoopers = toBuiltinData ()
+    , _authorizedStakingKeys = toBuiltinData ()
+    , _baseFee = toBuiltinData ()
+    , _simpleFee = toBuiltinData ()
+    , _strategyFee = toBuiltinData ()
+    , poolCreationFee = 0
+    , _extensions = toBuiltinData ()
+    }
 
-spendHolderCreatePool :: MaliciousTokensHolderAction -> LaunchpadConfig -> PubKeyHash -> PubKeyHash -> Run ()
-spendHolderCreatePool action config@LaunchpadConfig {..} wallet signer = do
+spendHolderCreatePool :: MaliciousTokensHolderAction -> Dex -> LaunchpadConfig -> PubKeyHash -> PubKeyHash -> Run ()
+spendHolderCreatePool action dex config@LaunchpadConfig {..} wallet signer = do
   let shareQuantity p r = floor @Double (sqrt (fromIntegral (p * r)))
 
-  submitTx wallet createMockFactoryTx
-  [(factoryRef, _)] <- utxoAt mockFactoryScript
+  -- create a mock factory for Wingriders
+  when (dex == Wr) $ do
+    ensureTx wallet $ payToScript mockFactoryScript (InlineDatum ()) mempty
+  factories <- utxoAt mockFactoryScript
+
+  -- create a settins utxo for Sundae
+  when (dex == Sundae) $ do
+    let value = adaValue 2_000_000 <> singleton mockSundaeSettingsCurrencySymbol C.settingsNftName 1
+    usp <- spend wallet value
+    ensureTx wallet $
+      userSpend usp <> payToScript mockSundaeSettingsScript (InlineDatum mockSettingsDatum) value
+  settings <- utxoAt mockSundaeSettingsScript
 
   holderUtxos <- boxAt (projectTokensHolderFinalValidator config)
-  -- TODO: allow for two holders
-  let holderUtxo = case holderUtxos of
+  let holderUtxo = case filter ((dex ==) . txBoxDatum) holderUtxos of
         h : _ -> h
-        [] -> error "spendHolderCreatePool: no holder utxos"
+        [] -> error "spendHolderCreatePool: no dex holder utxos"
+
       holderValue = txBoxValue holderUtxo
-
-  lower <- actualTime
-  let upper = lower + 1_000
-
       projectTokensQty = assetClassValueOf holderValue projectToken
       raisedTokensQty = assetClassValueOf holderValue raisingToken
 
-      lpShareTn = if raisingToken < projectToken then shareTokenName raisingToken projectToken else shareTokenName projectToken raisingToken
+      lpShareTn = case dex of
+        Wr ->
+          if raisingToken < projectToken
+            then wrShareTokenName raisingToken projectToken
+            else wrShareTokenName projectToken raisingToken
+        Sundae -> poolSundaeLpName mockSundaeIdentifier
+
+      lpShareCs = case dex of
+        Wr -> wrPoolCurrencySymbol
+        Sundae -> CurrencySymbol (unwrapScriptHash sundaePoolScriptHash)
 
       vestingDatum =
         VestingDatum
@@ -86,7 +120,7 @@ spendHolderCreatePool action config@LaunchpadConfig {..} wallet signer = do
               _ -> owner
           , vestingSymbol = case action of
               WrongVestingAsset -> adaSymbol
-              _ -> wrPoolCurrencySymbol
+              _ -> lpShareCs
           , vestingToken = case action of
               WrongVestingAsset -> adaToken
               _ -> lpShareTn
@@ -115,70 +149,87 @@ spendHolderCreatePool action config@LaunchpadConfig {..} wallet signer = do
   let poolValue =
         assetClassValue projectToken projectTokensQty
           <> assetClassValue raisingToken raisedTokensQty
-      poolToken = singleton wrPoolCurrencySymbol C.lpValidityTokenName 1
+
+      nftTn = case dex of
+        Wr -> C.lpValidityTokenName
+        Sundae -> poolSundaeNftName mockSundaeIdentifier
+      poolToken = case dex of
+        Wr -> singleton wrPoolCurrencySymbol C.lpValidityTokenName 1
+        Sundae -> singleton lpShareCs (poolSundaeNftName mockSundaeIdentifier) 1
 
       mintedShares = shareQuantity projectTokensQty raisedTokensQty
 
-      poolShares = singleton wrPoolCurrencySymbol lpShareTn (C.maxShareTokens - mintedShares)
+      poolShares = case dex of
+        Wr -> singleton lpShareCs lpShareTn (C.maxShareTokens - mintedShares)
+        Sundae -> mempty
+
       mintedValue =
-        singleton wrPoolCurrencySymbol C.lpValidityTokenName 1
-          <> singleton wrPoolCurrencySymbol lpShareTn mintedShares
+        -- NOTE: there are 3 values for Sundae in a genuine transaction
+        singleton lpShareCs nftTn 1
+          <> singleton lpShareCs lpShareTn mintedShares
 
       vestingValue =
-        singleton wrPoolCurrencySymbol lpShareTn vestingDatum.totalVestingQty <> case action of
+        singleton lpShareCs lpShareTn vestingDatum.totalVestingQty <> case action of
           WrongVestingQuantity -> inv (singleton vestingDatum.vestingSymbol vestingDatum.vestingToken 1)
           MultipleTokenTypes -> assetClassValue vUSDT 1
           _ -> mempty
+
+      -- NOTE: doesn't actually run the DEX-side validation
+      --       also, for Sundae tests use a constant mocked pool identifier
+      --       in reality it's computed from the first tx input out ref
       tx =
-        spendHolderCreatePoolTx
-          action
-          config
-          usp
-          factoryRef
-          holderUtxos
-          vestingDatum
-          mintedValue
-          poolValue
-          poolToken
-          poolShares
-          vestingValue
+        let otherHolderUtxo = holderUtxos !! 1
+         in mconcat
+              [ userSpend usp
+              , mintValue poolMintingPolicy () mintedValue
+              , spendScript
+                  (projectTokensHolderFinalValidator config)
+                  (txBoxRef holderUtxo)
+                  PTHF.NormalFlow
+                  dex
+              , case dex of
+                  Wr ->
+                    spendScript
+                      mockFactoryScript
+                      ( case factories of
+                          [(ref, _)] -> ref
+                          _ -> error "spendHolderCreatePool: no factory"
+                      )
+                      ()
+                      ()
+                  Sundae ->
+                    refInputInline
+                      ( case settings of
+                          [(ref, _)] -> ref
+                          _ -> error "spendHolderCreatePool: no settings"
+                      )
+              , case action of
+                  DoubleSatisfy ->
+                    spendScript
+                      (projectTokensHolderFinalValidator config)
+                      (txBoxRef otherHolderUtxo)
+                      PTHF.NormalFlow
+                      dex
+                  _ -> mempty
+              , payToScript vestingValidator (InlineDatum vestingDatum) vestingValue
+              , -- NOTE: we use the same "free" policy for both Sundae and Wr in testing
+                mintValue poolMintingPolicy () poolShares
+              , case dex of
+                  Wr ->
+                    payToScript
+                      (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash))
+                      (InlineDatum (wrDatum projectToken raisingToken))
+                      (poolValue <> poolToken <> poolShares)
+                  Sundae ->
+                    payToScript
+                      (TypedValidatorHash @SundaePoolDatum (toV2 sundaePoolScriptHash))
+                      (InlineDatum (sundaeDatum mockSundaeIdentifier projectToken raisingToken mintedShares))
+                      (poolValue <> poolToken <> poolShares)
+              ]
 
+  lower <- actualTime
+  let upper = lower + 1_000
   submitTx wallet =<< validateIn (interval lower upper) =<< signTx signer tx
-
-createMockFactoryTx :: Tx
-createMockFactoryTx = mconcat [payToScript mockFactoryScript (InlineDatum ()) mempty]
-
-spendHolderCreatePoolTx :: MaliciousTokensHolderAction -> LaunchpadConfig -> UserSpend -> TxOutRef -> [TxBox (TypedValidator Dex PTHF.TokensHolderFinalRedeemer)] -> VestingDatum -> Value -> Value -> Value -> Value -> Value -> Tx
-spendHolderCreatePoolTx
-  action
-  config@LaunchpadConfig {wrPoolValidatorHash, projectToken, raisingToken}
-  usp
-  mockFactoryRef
-  holderUtxos
-  vestingDatum
-  mintedValue
-  poolValue
-  poolToken
-  poolShares
-  vestingValue = do
-    let holderUtxo = case holderUtxos of
-          h : _ -> h
-          [] -> error "no holder utxos in spendHolderCreatePoolTx"
-        otherHolderUtxo = holderUtxos !! 1
-
-    -- NOTE: doesn't actually run the DEX-side validation
-    mconcat
-      [ userSpend usp
-      , mintValue poolMintingPolicy () mintedValue
-      , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NormalFlow Wr
-      , spendScript mockFactoryScript mockFactoryRef () ()
-      , case action of
-          DoubleSatisfy -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef otherHolderUtxo) PTHF.NormalFlow Wr
-          _ -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NormalFlow Wr
-      , payToScript vestingValidator (InlineDatum vestingDatum) vestingValue
-      , mintValue (poolMintingPolicy) () poolShares
-      , payToScript (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash)) (InlineDatum (lpDatum projectToken raisingToken)) (poolValue <> poolToken <> poolShares)
-      ]
 
 spendHolderPoolExists :: MaliciousTokensHolderAction -> LaunchpadConfig -> PubKeyHash -> PubKeyHash -> Run ()
 spendHolderPoolExists action config@LaunchpadConfig {..} wallet signer = do
@@ -203,7 +254,7 @@ spendHolderPoolExistsTx action config@LaunchpadConfig {daoFeeReceiver} holderUtx
   mconcat
     [ case action of
         NoPoolProof -> payToKey daoFeeReceiver mempty
-        _ -> refInputHash (txBoxRef poolProofUtxo) (txBoxDatum poolProofUtxo) -- TODO: doesn't that work?
+        _ -> refInputHash (txBoxRef poolProofUtxo) (txBoxDatum poolProofUtxo)
     , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.FailedFlow Wr
     , payToKey daoFeeReceiver daoFeeReceiverValue
     ]
