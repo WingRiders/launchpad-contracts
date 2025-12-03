@@ -51,6 +51,54 @@ instance DerivePlutusType PMultisigScript where
 instance PTryFrom PData (PAsData (PBuiltinList PMultisigScript))
 instance PTryFrom PData PMultisigScript
 
+-- NOTE: we only care about the fee, everything else is ignored
+data SundaeSettingsDatum = SundaeSettingsDatum
+  { _settingsAdmin :: BuiltinData
+  , _metadataAdmin :: BuiltinData
+  , _treasuryAdmin :: BuiltinData
+  , _treasuryAddress :: BuiltinData
+  , _treasuryAllowance :: BuiltinData
+  , _authorizedScoopers :: BuiltinData
+  , _authorizedStakingKeys :: BuiltinData
+  , _baseFee :: BuiltinData
+  , _simpleFee :: BuiltinData
+  , _strategyFee :: BuiltinData
+  , poolCreationFee :: Integer
+  , _extensions :: BuiltinData
+  }
+  deriving (Show, Eq, Generic)
+
+PlutusTx.makeIsDataIndexed 'SundaeSettingsDatum [('SundaeSettingsDatum, 0)]
+PlutusTx.makeLift ''SundaeSettingsDatum
+
+data PSundaeSettingsDatum (s :: S)
+  = PSundaeSettingsDatum
+      ( Term
+          s
+          ( PDataRecord
+              '[ "_settingsAdmin" ':= PData
+               , "_metadataAdmin" ':= PData
+               , "_treasuryAdmin" ':= PData
+               , "_treasuryAddress" ':= PData
+               , "_treasuryAllowance" ':= PData
+               , "_authorizedScoopers" ':= PData
+               , "_authorizedStakingKeys" ':= PData
+               , "_baseFee" ':= PData
+               , "_simpleFee" ':= PData
+               , "_strategyFee" ':= PData
+               , "poolCreationFee" ':= PInteger
+               , "_extensions" ':= PData
+               ]
+          )
+      )
+  deriving stock (Generic)
+  deriving anyclass (PlutusType, PIsData, PDataFields)
+
+instance DerivePlutusType PSundaeSettingsDatum where
+  type DPTStrat _ = PlutusTypeData
+
+instance PTryFrom PData PSundaeSettingsDatum
+
 -- Aiken's tuple is a builtin list of a limited length with
 -- It can enforce the different types of elements, PlutusTx can't
 type Asset = [BuiltinByteString]

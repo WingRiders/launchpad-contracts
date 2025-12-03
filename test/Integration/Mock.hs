@@ -48,6 +48,8 @@ data LaunchpadConfig = LaunchpadConfig
   , wrFactoryValidatorHash :: ScriptHash
   , wrPoolCurrencySymbol :: CurrencySymbol
   , sundaePoolScriptHash :: ScriptHash
+  , sundaeFeeTolerance :: Integer
+  , sundaeSettingsCurrencySymbol :: CurrencySymbol
   , startTime :: POSIXTime
   -- ^ The start time is set to the lowest of the tiers start times.
   , contributionEndTime :: POSIXTime
@@ -211,6 +213,12 @@ commitFoldFeeAdaAmount = 48_500
 rewardsFoldFeeAdaAmount :: Integer
 rewardsFoldFeeAdaAmount = 177_000
 
+mockSundaeFeeTolerance :: Integer
+mockSundaeFeeTolerance = 100_000_000
+
+mockSundaeSettingsCurrencySymbol :: CurrencySymbol
+mockSundaeSettingsCurrencySymbol = "112233445566778899bc8dc553f935543f7f004c2fc1a577a8fb96c4"
+
 defaultLaunchpadConfig :: LaunchpadConfig
 defaultLaunchpadConfig =
   LaunchpadConfig
@@ -221,6 +229,8 @@ defaultLaunchpadConfig =
     , wrFactoryValidatorHash = mockWrFactoryValidatorHash
     , wrPoolCurrencySymbol = mockWrPoolCurrencySymbol
     , sundaePoolScriptHash = mockSundaePoolScriptHash
+    , sundaeFeeTolerance = mockSundaeFeeTolerance
+    , sundaeSettingsCurrencySymbol = mockSundaeSettingsCurrencySymbol
     , startTime = 20_000 -- Starts in Slot 20
     , contributionEndTime = 500_000 -- Ends in Slot 500
     , withdrawalEndTime = 750_000 -- Ends in Slot 750

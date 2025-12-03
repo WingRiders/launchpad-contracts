@@ -70,6 +70,8 @@ data TokensHolderFinalConfig = TokensHolderFinalConfig
   , wrPoolValidatorHash :: ScriptHash
   , wrFactoryValidatorHash :: ScriptHash
   , sundaePoolScriptHash :: ScriptHash
+  , sundaeFeeTolerance :: Integer
+  , sundaeSettingsCurrencySymbol :: CurrencySymbol
   , poolProofValidatorHash :: ScriptHash
   , vestingValidatorHash :: ScriptHash
   , vestingPeriodDuration :: POSIXTime
@@ -102,6 +104,8 @@ data PTokensHolderFinalConfig (s :: S)
               , "wrPoolValidatorHash" ':= PScriptHash
               , "wrFactoryValidatorHash" ':= PScriptHash
               , "sundaePoolScriptHash" ':= PScriptHash
+              , "sundaeFeeTolerance" ':= PInteger
+              , "sundaeSettingsCurrencySymbol" ':= PCurrencySymbol
               , "poolProofValidatorHash" ':= PScriptHash
               , "vestingValidatorHash" ':= PScriptHash
               , "vestingPeriodDuration" ':= PPOSIXTime
@@ -254,6 +258,8 @@ projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
         , "wrPoolValidatorHash"
         , "wrFactoryValidatorHash"
         , "sundaePoolScriptHash"
+        , "sundaeFeeTolerance"
+        , "sundaeSettingsCurrencySymbol"
         , "vestingValidatorHash"
         , "vestingPeriodDuration"
         , "vestingPeriodDurationToFirstUnlock"
@@ -306,11 +312,14 @@ projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
                   (cfgF.daoFeeReceiver, cfgF.daoFeeUnits, cfgF.daoFeeBase)
                   (cfgF.vestingValidatorHash, cfgF.vestingPeriodInstallments, cfgF.vestingPeriodDuration, cfgF.vestingPeriodDurationToFirstUnlock, cfgF.vestingPeriodStart)
                   cfgF.sundaePoolScriptHash
+                  cfgF.sundaeFeeTolerance
+                  cfgF.sundaeSettingsCurrencySymbol
                   (projectCs, projectTn)
                   (raisingCs, raisingTn)
                   (numRaised, cfgF.raisedTokensPoolPartPercentage, cfgF.collateral)
                   ownInputValue
                   txInputs
+                  txRefInputs
                   txOutputs
                   infoF.datums
                   mint
@@ -335,10 +344,13 @@ pvalidateNoSundaePool ::
   (Term s PAddress, Term s PInteger, Term s PInteger) ->
   (Term s PScriptHash, Term s PInteger, Term s PPOSIXTime, Term s PPOSIXTime, Term s PPOSIXTime) ->
   Term s PScriptHash ->
+  Term s PInteger ->
+  Term s PCurrencySymbol ->
   (Term s PCurrencySymbol, Term s PTokenName) ->
   (Term s PCurrencySymbol, Term s PTokenName) ->
   (Term s PInteger, Term s PInteger, Term s PInteger) ->
   Term s (PValue anyKey anyAmount) ->
+  Term s (PBuiltinList PTxInInfo) ->
   Term s (PBuiltinList PTxInInfo) ->
   Term s (PBuiltinList PTxOut) ->
   Term s (PMap any PDatumHash PDatum) ->
@@ -349,11 +361,14 @@ pvalidateNoSundaePool
   (daoFeeReceiver, daoFeeUnits, daoFeeBase)
   (vestingValidatorHash, vestingPeriodInstallments, vestingPeriodDuration, vestingPeriodDurationToFirstUnlock, vestingPeriodStartTime)
   poolScriptHash
+  feeTolerance
+  settingsCurrencySymbol
   (projectCs, projectTn)
   (raisingCs, raisingTn)
   (numRaised, raisedTokensPoolPartPercentage, returnedCollateral)
   ownInputValue
   txInputs
+  txReferenceInputs
   txOutputs
   datums
   mint = unTermCont do
@@ -369,9 +384,12 @@ pvalidateNoSundaePool
     poolOutputF <- pletFieldsC @["address", "datum", "value"] poolUTxO
 
     let poolDatum = pfromPDatum @PSundaePoolDatum #$ ptryFromInlineDatum # poolOutputF.datum
-    pool <- pletFieldsC @'["identifier", "circulatingLp"] poolDatum
+    pool <- pletFieldsC @'["identifier", "circulatingLp", "protocolFees"] poolDatum
 
     poolIdentifier <- pletC pool.identifier
+    -- The pool minting policy allows setting the protocolFees above what's required
+    -- by the Sundae settings, we require an exact match
+    protocolFees <- pletC pool.protocolFees
     let poolCs = pcon . PCurrencySymbol . pto $ poolScriptHash
     plpShareTn <- pletC (poolSundaeLpName poolIdentifier)
     poolNft <- pletC (poolSundaeNftName poolIdentifier)
@@ -405,7 +423,9 @@ pvalidateNoSundaePool
          ]
         vestingDatum
 
-    -- NOTE: staking choice is restricted by the "settings" ref utxo, we don't check it
+    let settings = findSundaeSettingsDatum txReferenceInputs settingsCurrencySymbol
+
+    -- NOTE: staking choice is restricted by the "settings" ref utxo, we don't control nor check it
     pure $
       pand'List
         [ -- The tokens holder
@@ -434,6 +454,10 @@ pvalidateNoSundaePool
             # txOutputs
         , -- The vesting has ada and shares
           pcountOfUniqueTokens # vesting.value #== 2
+        , -- The Sundae pool creation fee is tolerated by the launch
+          protocolFees #<= feeTolerance
+        , -- The deposited Sundae pool creation fee is the same as in the settings
+          protocolFees #== pfield @"poolCreationFee" # settings
         , -- The pool receives all project tokens, we don't need to check the datum assets, as the policy does that
           pvalueOf # poolOutputF.value # projectCs # projectTn #== pvalueOf # ownInputValue # projectCs # projectTn
         , -- The pool receives all raising tokens, we don't need to check the datum assets, as the policy does that
@@ -450,6 +474,22 @@ pvalidateNoSundaePool
         , vestingDatumF.firstUnlockPossibleAfter #== vestingPeriodStartTime + vestingPeriodDurationToFirstUnlock
         , vestingDatumF.totalInstallments #== vestingPeriodInstallments
         ]
+
+-- NOTE: we need to validate it because no Sundae-side validation is being run when the fee is above the tolerance
+findSundaeSettingsDatum :: Term s (PBuiltinList PTxInInfo) -> Term s PCurrencySymbol -> Term s PSundaeSettingsDatum
+findSundaeSettingsDatum referenceInputs settingsCurrencySymbol = unTermCont do
+  let settings =
+        passertSingleton "settings"
+          #$ pfilter
+          # plam
+            ( \o -> unTermCont do
+                settingsOutput <- pletFieldsC @'["value", "datum"] $ ptxInInfoResolved # o
+                pure (pvalueOf # settingsOutput.value # settingsCurrencySymbol # pconstant C.settingsNftName #== 1)
+            )
+          # referenceInputs
+  settingsOutput <- pletFieldsC @'["value", "datum"] $ ptxInInfoResolved # settings
+  settingsDatum <- pletC $ pfromPDatum #$ ptryFromInlineDatum # settingsOutput.datum
+  pure settingsDatum
 
 pvalidatePoolExists ::
   Term s PAddress ->

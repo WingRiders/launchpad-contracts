@@ -98,3 +98,6 @@ maxInt64 = 9_223_372_036_854_775_807
 -}
 poolOilAda :: Num a => a
 poolOilAda = 3_000_000
+
+settingsNftName :: TokenName
+settingsNftName = "settings"

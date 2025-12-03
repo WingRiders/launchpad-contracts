@@ -139,8 +139,8 @@ pvalidatePoolProofMinting cfg dex context = unTermCont do
                     )
 
                 assets <- pletFieldsC @'["a", "b"] poolDatum.assets
-                assetA <- pletFieldsC @'["currencySymbol", "tokenName"] assets.a
-                assetB <- pletFieldsC @'["currencySymbol", "tokenName"] assets.b
+                assetA <- pletFieldsC @'["currencySymbol", "tokenName"] $ assets.a
+                assetB <- pletFieldsC @'["currencySymbol", "tokenName"] $ assets.b
 
                 let assetASymbol = pfromData assetA.currencySymbol
                 let assetAToken = pfromData assetA.tokenName
