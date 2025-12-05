@@ -176,14 +176,14 @@ ppaysAtleastToAddress symbol token amount address =
         ]
 
 data TokensHolderFinalRedeemer
-  = PoolExists
-  | NoPool
+  = FailedFlow
+  | NormalFlow
   deriving stock (Generic, Enum, Bounded)
   deriving (PlutusTx.ToData, PlutusTx.FromData) via (EnumIsData TokensHolderFinalRedeemer)
 
 data PTokensHolderFinalRedeemer (s :: S)
-  = PPoolExists
-  | PNoPool
+  = PFailedFlow
+  | PNormalFlow
   deriving stock (Generic, Enum, Bounded)
   deriving anyclass (PlutusType, PIsData, PEq, PShow)
 
@@ -289,10 +289,10 @@ projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
   pure $
     pand'List
       [ pmatch redeemer \case
-          PNoPool ->
+          PNormalFlow ->
             pif
               (datum #== pcon PWr)
-              ( pvalidateNoWrPool
+              ( pvalidateNormalFlowWr
                   cfgF.owner
                   cfgF.wrFactoryValidatorHash
                   (cfgF.daoFeeReceiver, cfgF.daoFeeUnits, cfgF.daoFeeBase)
@@ -307,7 +307,7 @@ projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
                   infoF.datums
                   mint
               )
-              ( pvalidateNoSundaePool
+              ( pvalidateNormalFlowSundae
                   cfgF.owner
                   (cfgF.daoFeeReceiver, cfgF.daoFeeUnits, cfgF.daoFeeBase)
                   (cfgF.vestingValidatorHash, cfgF.vestingPeriodInstallments, cfgF.vestingPeriodDuration, cfgF.vestingPeriodDurationToFirstUnlock, cfgF.vestingPeriodStart)
@@ -324,8 +324,8 @@ projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
                   infoF.datums
                   mint
               )
-          PPoolExists ->
-            pvalidatePoolExists
+          PFailedFlow ->
+            pvalidateFailedFlowWr
               cfgF.owner
               (cfgF.daoFeeReceiver, cfgF.daoFeeUnits, cfgF.daoFeeBase)
               cfgF.poolProofValidatorHash
@@ -339,7 +339,7 @@ projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
               datum
       ]
 
-pvalidateNoSundaePool ::
+pvalidateNormalFlowSundae ::
   Term s PAddress ->
   (Term s PAddress, Term s PInteger, Term s PInteger) ->
   (Term s PScriptHash, Term s PInteger, Term s PPOSIXTime, Term s PPOSIXTime, Term s PPOSIXTime) ->
@@ -356,7 +356,7 @@ pvalidateNoSundaePool ::
   Term s (PMap any PDatumHash PDatum) ->
   Term s (PValue 'Sorted 'NoGuarantees) ->
   Term s PBool
-pvalidateNoSundaePool
+pvalidateNormalFlowSundae
   owner
   (daoFeeReceiver, daoFeeUnits, daoFeeBase)
   (vestingValidatorHash, vestingPeriodInstallments, vestingPeriodDuration, vestingPeriodDurationToFirstUnlock, vestingPeriodStartTime)
@@ -491,7 +491,7 @@ findSundaeSettingsDatum referenceInputs settingsCurrencySymbol = unTermCont do
   settingsDatum <- pletC $ pfromPDatum #$ ptryFromInlineDatum # settingsOutput.datum
   pure settingsDatum
 
-pvalidatePoolExists ::
+pvalidateFailedFlowWr ::
   Term s PAddress ->
   (Term s PAddress, Term s PInteger, Term s PInteger) ->
   Term s PScriptHash ->
@@ -504,7 +504,7 @@ pvalidatePoolExists ::
   Term s (PBuiltinList PTxInInfo) ->
   Term s PDex ->
   Term s PBool
-pvalidatePoolExists
+pvalidateFailedFlowWr
   owner
   (daoFeeReceiver, daoFeeUnits, daoFeeBase)
   poolProofValidatorHash
@@ -577,7 +577,7 @@ pvalidatePoolExists
             # txOutputs
         ]
 
-pvalidateNoWrPool ::
+pvalidateNormalFlowWr ::
   Term s PAddress ->
   Term s PScriptHash ->
   (Term s PAddress, Term s PInteger, Term s PInteger) ->
@@ -592,7 +592,7 @@ pvalidateNoWrPool ::
   Term s (PMap 'Unsorted PDatumHash PDatum) ->
   Term s (PValue 'Sorted 'NoGuarantees) ->
   Term s PBool
-pvalidateNoWrPool
+pvalidateNormalFlowWr
   owner
   factoryValidatorHash
   (daoFeeReceiver, daoFeeUnits, daoFeeBase)

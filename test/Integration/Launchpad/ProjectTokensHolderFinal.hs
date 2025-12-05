@@ -155,11 +155,11 @@ spendHolderCreatePoolTx action config@LaunchpadConfig {owner, daoFeeReceiver, wr
   mconcat
     [ userSpend usp
     , mintValue poolMintingPolicy () mintedValue
-    , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NoPool Wr
+    , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NormalFlow Wr
     , spendScript mockFactoryScript mockFactoryRef () ()
     , case action of
-        DoubleSatisfy -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef otherHolderUtxo) PTHF.NoPool Wr
-        _ -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NoPool Wr
+        DoubleSatisfy -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef otherHolderUtxo) PTHF.NormalFlow Wr
+        _ -> spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.NormalFlow Wr
     , payToScript vestingValidator (HashDatum vestingDatum) vestingValue
     , mintValue (poolMintingPolicy) () poolShares
     , payToScript (TypedValidatorHash @WrPoolConstantProductDatum (toV2 wrPoolValidatorHash)) (InlineDatum (lpDatum projectToken raisingToken)) (poolValue <> poolToken <> poolShares)
@@ -218,7 +218,7 @@ spendHolderPoolExistsTx action config@LaunchpadConfig {owner, daoFeeReceiver} ho
     [ case action of
         NoPoolProof -> payToKey owner mempty
         _ -> refInputHash (txBoxRef poolProofUtxo) (txBoxDatum poolProofUtxo) -- TODO: doesn't that work?
-    , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.PoolExists Wr
+    , spendScript (projectTokensHolderFinalValidator config) (txBoxRef holderUtxo) PTHF.FailedFlow Wr
     , payToKey daoFeeReceiver daoFeeReceiverValue
     , payToKey owner ownerValue
     ]
