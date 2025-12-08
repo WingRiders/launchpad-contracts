@@ -9,46 +9,45 @@ import Plutarch.DataRepr
 import Plutarch.Extra.TermCont
 import Plutarch.PlutusScript (toScript)
 import Plutarch.Prelude
-import Plutarch.Unsafe
 import Plutarch.Util
 import Plutus.Util (scriptHashToAddress)
 import PlutusLedgerApi.V2
 import PlutusTx qualified
 
 data VestingDatum = VestingDatum
-  { beneficiary :: !Address
+  { beneficiary :: Address
   -- ^
   --  Beneficiary of the vesting script.
   --  After sufficient time has passed, he is eligible to unlock [vestingAsset] tokens.
   --  A signature corresponding to the PubKeyHash is needed to unlock funds.
-  , vestingSymbol :: !CurrencySymbol
+  , vestingSymbol :: CurrencySymbol
   -- ^
   --  The asset that is being vested in this script.
   --  It is subject to the vesting period.
   --  Any other asset can be unlocked by the beneficiary freely at any time.
-  , vestingToken :: !TokenName
+  , vestingToken :: TokenName
   -- ^
   --  The asset that is being vested in this script.
   --  It is subject to the vesting period.
   --  Any other asset can be unlocked by the beneficiary freely at any time.
-  , totalVestingQty :: !Integer
+  , totalVestingQty :: Integer
   -- ^
   --  Total quantity of the [vestingAsset] at the time of the initial creation of this vesting UTxO.
   --  It is used to correctly compute how many tokens can be unlocked over the vesting period.
-  , vestingPeriodStart :: !POSIXTime
+  , vestingPeriodStart :: POSIXTime
   -- ^
   --  Start of the vesting period.
-  , vestingPeriodEnd :: !POSIXTime
+  , vestingPeriodEnd :: POSIXTime
   -- ^
   --  End of the vesting period.
   --  All tokens can be unlocked after this timestamp.
-  , firstUnlockPossibleAfter :: !POSIXTime
+  , firstUnlockPossibleAfter :: POSIXTime
   -- ^
   --  First unlock is possible after this timestamp.
   --  No tokens can be unlocked before this timestamp.
   --
   --  Note: This timestamp should be between [vestingPeriodStart] and [vestingPeriodEnd].
-  , totalInstallments :: !Integer
+  , totalInstallments :: Integer
   -- ^
   --  Total number of theoretical unlock installments split evenly throughout the vesting period.
   --  Tokens can be unlocked at most this number of times.
@@ -60,7 +59,7 @@ data VestingDatum = VestingDatum
   --  For example, setting [totalInstallments = 24, firstUnlockPossibleAfter = now + 6 months, vestingPeriodStart = now, vestingPeriodEnd = now + 2 years]
   --  would render an installment once per month over 2 years. The beneficiary is able to unlock first tokens in 6 months.
   --  At this time, it's already 6 installments in, so he takes 6/24 of the [totalVestingQty].
-  , vestingMemo :: !BuiltinByteString
+  , vestingMemo :: BuiltinByteString
   -- ^
   --  Additional details of the vesting contract, to be used for presentation purposes.
   }
@@ -89,7 +88,6 @@ data PVestingDatum (s :: S)
 
 instance DerivePlutusType PVestingDatum where
   type DPTStrat _ = PlutusTypeData
-
 instance PTryFrom PData PVestingDatum
 
 data VestingRedeemer
@@ -111,6 +109,7 @@ data PVestingRedeemer (s :: S)
 
 instance DerivePlutusType PVestingRedeemer where
   type DPTStrat _ = PlutusTypeData
+instance PTryFrom PData PVestingRedeemer
 
 {- |
   This validates a partial unlock of a vesting UTxO.
@@ -136,83 +135,92 @@ instance DerivePlutusType PVestingRedeemer where
 
   Note: To prevent double-satisfaction, we enforce 1 vesting input and 1 vesting output.
 -}
-pvalidateVestingPartialUnlock ::
-  Term
-    s
-    ( PVestingDatum
-        :--> PScriptContext
-        :--> PBool
-    )
-pvalidateVestingPartialUnlock = phoistAcyclic $ plam $ \datum'' context' -> unTermCont $ do
+pvalidateVestingPartialUnlock :: Term s PVestingDatum -> Term s PScriptContext -> Term s PBool
+pvalidateVestingPartialUnlock datum'' context' = unTermCont $ do
   PVestingDatum datum' <- pmatchC datum''
-  context <- tcont $ pletFields @'["txInfo", "purpose"] context'
-  txInfo <- tcont $ pletFields @'["outputs", "inputs", "signatories", "validRange"] context.txInfo
+
+  context <- pletFieldsC @'["txInfo", "purpose"] context'
+  txInfo <- pletFieldsC @'["outputs", "inputs", "signatories", "validRange"] context.txInfo
   txInfoInputs <- pletC txInfo.inputs
+
   let txOutputs = pfromData txInfo.outputs
-  let txInputs = pmap # ptxInInfoResolved # txInfoInputs
-  let scriptPurpose = context.purpose
-  let ownVestingInput = pownInput # scriptPurpose # txInfoInputs
+      txInputs = pmap # ptxInInfoResolved # txInfoInputs
+      scriptPurpose = context.purpose
+      ownVestingInput = pownInput # scriptPurpose # txInfoInputs
+
   ownValidatorHash <- pletC $ pgetValidatorHashFromScriptAddress #$ ptxOutAddress # ownVestingInput
+
   let allVestingInputs = pfindScriptOutputs # ownValidatorHash # txInputs
-  let allVestingOutputs = pfindScriptOutputs # ownValidatorHash # txOutputs
+      allVestingOutputs = pfindScriptOutputs # ownValidatorHash # txOutputs
+
   datum <-
-    tcont $
-      pletFields
-        @'[ "beneficiary"
-          , "vestingSymbol"
-          , "vestingToken"
-          , "totalVestingQty"
-          , "vestingPeriodStart"
-          , "vestingPeriodEnd"
-          , "firstUnlockPossibleAfter"
-          , "totalInstallments"
-          ]
-        datum'
+    pletFieldsC
+      @'[ "beneficiary"
+        , "vestingSymbol"
+        , "vestingToken"
+        , "totalVestingQty"
+        , "vestingPeriodStart"
+        , "vestingPeriodEnd"
+        , "firstUnlockPossibleAfter"
+        , "totalInstallments"
+        ]
+      datum'
 
   let signatories = txInfo.signatories
-  let ctxTxInfoValidRange = pfromData txInfo.validRange
+      ctxTxInfoValidRange = pfromData txInfo.validRange
+
   beneficiary <- pletC datum.beneficiary
+
   let totalVestingQty = datum.totalVestingQty
+
   vestingSymbol <- pletC datum.vestingSymbol
   vestingToken <- pletC datum.vestingToken
+
   let vestingPeriodStart = pfromData $ datum.vestingPeriodStart
-  let vestingPeriodEnd = pfromData $ datum.vestingPeriodEnd
+      vestingPeriodEnd = pfromData $ datum.vestingPeriodEnd
+
   totalInstallments <- pletC datum.totalInstallments
+
   currentTimeApproximation <- pletC $ plowerBoundCurrentTimeApproximation # ctxTxInfoValidRange
+
   let firstUnlockPossibleAfter = pfromData datum.firstUnlockPossibleAfter
 
   sVestingInput <- pletC $ passertSingleton "v single input" # allVestingInputs
   sVestingOutput <- pletC $ passertSingleton "v single output" # allVestingOutputs
 
-  PPair oldVestingValue oldVestingDatumHash <- pmatchC sVestingInput
-  PPair newVestingValue newVestingDatumHash <- pmatchC sVestingOutput
+  PPair oldVestingValue oldVestingDatum <- pmatchC sVestingInput
+  PPair newVestingValue newVestingDatum <- pmatchC sVestingOutput
 
   let oldRemainingQty = pvalueOf # oldVestingValue # vestingSymbol # vestingToken
+
   newRemainingQty <- pletC $ pvalueOf # newVestingValue # vestingSymbol # vestingToken
   vestEndPeriod <- pletC $ pto vestingPeriodEnd
-  let vestingPeriodLength = passertPositive # vestEndPeriod - pto vestingPeriodStart
-  let vestingTimeRemaining = passertPositive # vestEndPeriod - pto currentTimeApproximation
-  let timeBetweenTwoInstallments = passertPositive #$ pdivideCeil # vestingPeriodLength # totalInstallments
-  let futureInstallments = passertPositive #$ pdivideCeil # vestingTimeRemaining # timeBetweenTwoInstallments
 
-  let expectedRemainingQty =
+  let vestingPeriodLength = passertPositive # vestEndPeriod - pto vestingPeriodStart
+      vestingTimeRemaining = passertPositive # vestEndPeriod - pto currentTimeApproximation
+      timeBetweenTwoInstallments = passertPositive #$ pdivideCeil # vestingPeriodLength # totalInstallments
+      futureInstallments = passertPositive #$ pdivideCeil # vestingTimeRemaining # timeBetweenTwoInstallments
+
+      expectedRemainingQty =
         pdivideCeil # (futureInstallments * passertPositive # totalVestingQty) #$ passertPositive # totalInstallments
 
-  let beneficiaryHash = paddressPubKeyCredential #$ beneficiary
+      beneficiaryHash = paddressPubKeyCredential #$ beneficiary
 
-  let signedByBeneficiary = ptxSignedByPkh # pdata beneficiaryHash # signatories
-  let firstUnlockPossible = firstUnlockPossibleAfter #< currentTimeApproximation
-  let isPartialUnlock = 0 #< newRemainingQty
-  let withdrawnSomething = newRemainingQty #< oldRemainingQty
-  let unlockingAllVested = expectedRemainingQty #== newRemainingQty
-  let datumNotChanged = oldVestingDatumHash #== newVestingDatumHash
-  return $
-    ptraceIfFalse "vPU signed by beneficiary" signedByBeneficiary
-      #&& ptraceIfFalse "vPU first unlock possible" firstUnlockPossible
-      #&& ptraceIfFalse "vPU is partial unlock" isPartialUnlock
-      #&& ptraceIfFalse "vPU withdrawn something" withdrawnSomething
-      #&& ptraceIfFalse "vPU unlocking all vested" unlockingAllVested
-      #&& ptraceIfFalse "vPU datum not changed" datumNotChanged
+      signedByBeneficiary = ptxSignedByPkh # pdata beneficiaryHash # signatories
+      firstUnlockPossible = firstUnlockPossibleAfter #< currentTimeApproximation
+      isPartialUnlock = 0 #< newRemainingQty
+      withdrawnSomething = newRemainingQty #< oldRemainingQty
+      unlockingAllVested = expectedRemainingQty #== newRemainingQty
+      datumNotChanged = oldVestingDatum #== newVestingDatum
+
+  pure . pand'List $
+    [ ptraceIfFalse "vPU signed by beneficiary" signedByBeneficiary
+    , ptraceIfFalse "vPU first unlock possible" firstUnlockPossible
+    , ptraceIfFalse "vPU is partial unlock" isPartialUnlock
+    , ptraceIfFalse "vPU withdrawn something" withdrawnSomething
+    , ptraceIfFalse "vPU unlocking all vested" unlockingAllVested
+    , ptraceIfFalse "vPU datum not changed" datumNotChanged
+    ]
 
 {- |
   This validates a full unlock of a vesting UTxO.
@@ -220,23 +228,25 @@ pvalidateVestingPartialUnlock = phoistAcyclic $ plam $ \datum'' context' -> unTe
    2. Vesting period end is in the past.
       We use the transaction validity start timestamp to lower bound and approximate the current time.
 -}
-pvalidateVestingFullUnlock :: Term s (PVestingDatum :--> PScriptContext :--> PBool)
-pvalidateVestingFullUnlock = phoistAcyclic $ plam $ \datum'' context -> unTermCont $ do
+pvalidateVestingFullUnlock :: Term s PVestingDatum -> Term s PScriptContext -> Term s PBool
+pvalidateVestingFullUnlock datum'' context = unTermCont $ do
   PVestingDatum datum' <- pmatchC datum''
-  datum <- tcont $ pletFields @'["beneficiary", "vestingPeriodEnd"] datum'
-  txInfo <- tcont $ pletFields @'["signatories", "validRange"] $ pfield @"txInfo" # context
-  let beneficiary = datum.beneficiary
-  let vestingPeriodEnd = datum.vestingPeriodEnd
-  let signatories = txInfo.signatories
-  let txInfoValidRange = txInfo.validRange
-  let currentTimeApproximation = plowerBoundCurrentTimeApproximation # txInfoValidRange
-  let beneficiaryHash = paddressPubKeyCredential #$ pfromData beneficiary
-  let signedByBeneficiary = ptxSignedByPkh # pdata beneficiaryHash # signatories
-  let vestingPeriodEnded = vestingPeriodEnd #< currentTimeApproximation
+  datum <- pletFieldsC @'["beneficiary", "vestingPeriodEnd"] datum'
+  txInfo <- pletFieldsC @'["signatories", "validRange"] $ pfield @"txInfo" # context
 
-  return $
-    ptraceIfFalse "vFU signed by beneficiary" signedByBeneficiary
-      #&& ptraceIfFalse "vFU vesting period ended" vestingPeriodEnded
+  let beneficiary = datum.beneficiary
+      vestingPeriodEnd = datum.vestingPeriodEnd
+      signatories = txInfo.signatories
+      txInfoValidRange = txInfo.validRange
+      currentTimeApproximation = plowerBoundCurrentTimeApproximation # txInfoValidRange
+      beneficiaryHash = paddressPubKeyCredential #$ pfromData beneficiary
+      signedByBeneficiary = ptxSignedByPkh # pdata beneficiaryHash # signatories
+      vestingPeriodEnded = vestingPeriodEnd #< currentTimeApproximation
+
+  pure . pand'List $
+    [ ptraceIfFalse "vFU signed by beneficiary" signedByBeneficiary
+    , ptraceIfFalse "vFU vesting period ended" vestingPeriodEnded
+    ]
 
 {- |
   This validates the spending of vesting UTxOs.
@@ -245,26 +255,17 @@ pvalidateVestingFullUnlock = phoistAcyclic $ plam $ \datum'' context -> unTermCo
    2. Fully unlock all tokens. Assumes they are all vested already.
 -}
 pvalidateVestingScript ::
-  Term
-    s
-    ( PVestingDatum
-        :--> PVestingRedeemer
-        :--> PScriptContext
-        :--> PUnit
-    )
-pvalidateVestingScript =
-  phoistAcyclic $
-    plam $
-      \datum redeemer context ->
-        perrorIfFalse #$ pmatch redeemer $ \case
-          PPartialUnlock _ -> pvalidateVestingPartialUnlock # datum # context
-          PFullUnlock _ -> pvalidateVestingFullUnlock # datum # context
+  Term s PVestingDatum -> Term s PVestingRedeemer -> Term s PScriptContext -> Term s PUnit
+pvalidateVestingScript datum redeemer context =
+  perrorIfFalse #$ pmatch redeemer $ \case
+    PPartialUnlock _ -> pvalidateVestingPartialUnlock datum context
+    PFullUnlock _ -> pvalidateVestingFullUnlock datum context
 
 pvalidateVestingScriptValidator :: Term s PValidator
-pvalidateVestingScriptValidator = phoistAcyclic $ plam $ \rawDatum rawRedeemer ctx ->
-  let datum = punsafeCoerce rawDatum
-      redeemer = punsafeCoerce rawRedeemer
-   in popaque $ pvalidateVestingScript # datum # redeemer # ctx
+pvalidateVestingScriptValidator = plam $ \rawDatum rawRedeemer ctx ->
+  let datum = ptryFrom rawDatum fst
+      redeemer = ptryFrom rawRedeemer fst
+   in popaque $ pvalidateVestingScript datum redeemer ctx
 
 vestingScriptValidator :: Script
 vestingScriptValidator = toScript pvalidateVestingScriptValidator

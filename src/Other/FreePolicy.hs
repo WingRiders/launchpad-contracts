@@ -3,7 +3,6 @@ module Other.FreePolicy where
 import Plutarch
 import Plutarch.Api.V2 (
   PMintingPolicy,
-  PScriptContext,
   scriptHash,
  )
 import Plutarch.PlutusScript (toScript)
@@ -13,14 +12,11 @@ import PlutusLedgerApi.V2 (
   ScriptHash (..),
  )
 
-pvalidateFree :: Term s (PData :--> PScriptContext :--> PUnit)
-pvalidateFree = plam $ \_ _ -> pconstant ()
-
 pvalidateFreePolicy :: Term s PMintingPolicy
-pvalidateFreePolicy = plam $ \redeemer context -> popaque $ pvalidateFree # redeemer # context
+pvalidateFreePolicy = plam (\_redeemer _context -> popaque (pconstant ()))
 
 freeMintingPolicy :: Script
 freeMintingPolicy = toScript pvalidateFreePolicy
 
 freeCurrencySymbol :: CurrencySymbol
-freeCurrencySymbol = CurrencySymbol $ getScriptHash $ scriptHash freeMintingPolicy
+freeCurrencySymbol = CurrencySymbol . getScriptHash . scriptHash $ freeMintingPolicy

@@ -56,15 +56,15 @@ instance PTryFrom PData PRefScriptCarrierDatum
       1. The transaction has to be signed by the owner specified in datum
       2. The lower bound of the current time approximation must be equal or higher than the specified deadline
 -}
-prefScriptCarrierValidator :: Term s (PRefScriptCarrierDatum :--> PScriptContext :--> PBool)
-prefScriptCarrierValidator = phoistAcyclic $ plam \datum context -> unTermCont do
+prefScriptCarrierValidator :: Term s PRefScriptCarrierDatum -> Term s PScriptContext -> Term s PBool
+prefScriptCarrierValidator datum context = unTermCont do
   contextFields <- pletFieldsC @'["txInfo"] context
   txInfoFields <- pletFieldsC @'["signatories", "validRange"] contextFields.txInfo
 
   datumF <- pletFieldsC @'["owner", "deadline"] datum
 
   let signedByOwner = ptxSignedByPkh # datumF.owner # txInfoFields.signatories
-  let timestamps = pfiniteTxValidityRangeTimestamps # txInfoFields.validRange
+      timestamps = pfiniteTxValidityRangeTimestamps # txInfoFields.validRange
   PTimestamps lowerTime _ <- pmatchC timestamps
 
   pure $
@@ -74,9 +74,9 @@ prefScriptCarrierValidator = phoistAcyclic $ plam \datum context -> unTermCont d
       ]
 
 refScriptCarrierValidator :: Term s PValidator
-refScriptCarrierValidator = phoistAcyclic $ plam \rawDatum _redeemer context ->
+refScriptCarrierValidator = plam \rawDatum _redeemer context ->
   let datum = ptryFrom @PRefScriptCarrierDatum rawDatum fst
-   in popaque $ perrorIfFalse #$ prefScriptCarrierValidator # datum # context
+   in popaque $ perrorIfFalse #$ prefScriptCarrierValidator datum context
 
 refScriptCarrierScriptValidator :: Script
 refScriptCarrierScriptValidator = toScript refScriptCarrierValidator
