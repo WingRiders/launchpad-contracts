@@ -65,10 +65,9 @@ deriving via
 
 {- | This validates minting of a PoolProof token and creation of PoolProof.
      In order to transaction be valid:
-      1. There is a WR V2 pool utxo with the pool validity token in the reference inputs if passed redeemer is 0.
-      2. There is a Sundae V3 pool utxo with the pool validity token in the reference inputs if passed redeemer is 1.
-      3. The passed redeemer is either 0 or 1.
-      4. The passed redeemer is equal to the dex field of the pool proof output datum.
+      1. There is a WR V2 pool utxo with the pool validity token in the reference inputs if passed redeemer is Wr.
+      2. There is a Sundae V3 pool utxo with the pool validity token in the reference inputs if passed redeemer is Sundae.
+      3. The passed redeemer is equal to the dex field of the pool proof output datum.
       4. The assets pair of the pool is a committed tokens/project tokens pair stored in the inline datum.
       5. 1 pool proof token is minted, its token name is equal to the validator hash of the utxo where it's placed.
       6. There is only ADA and pool proof token in the pool proof output.
@@ -95,90 +94,81 @@ pvalidatePoolProofMinting cfg dex context = unTermCont do
       (pfromPDatum @PPoolProofDatum # (ptryFromInlineDatum # poolProofOut.datum))
 
   let isCorrectPool =
-        pcond
-          [
-            ( dex #== pcon PWr
-            , unTermCont do
-                let poolRefInput =
-                      passertSingleSpecificInput "D2wr"
-                        # ptxInInfoResolved
-                        # cfgF.wrPoolValidatorHash
-                        # cfgF.wrPoolSymbol
-                        # (pconstant C.lpValidityTokenName)
-                        # tx.referenceInputs
-                pool <- pletFieldsC @'["datum"] poolRefInput
-                poolDatum <-
-                  pletFieldsC @'["assetASymbol", "assetAToken", "assetBSymbol", "assetBToken"]
-                    ( pfromPDatum @PWrPoolConstantProductDatum
-                        #$ ptryFromInlineDatum
-                        # pool.datum
-                    )
-                pure $
-                  pisCorrectPool
+        pmatch dex \case
+          PWr -> unTermCont do
+            let poolRefInput =
+                  passertSingleSpecificInput "D2"
+                    # ptxInInfoResolved
+                    # cfgF.wrPoolValidatorHash
+                    # cfgF.wrPoolSymbol
+                    # (pconstant C.lpValidityTokenName)
+                    # tx.referenceInputs
+            pool <- pletFieldsC @'["datum"] poolRefInput
+            poolDatum <-
+              pletFieldsC @'["assetASymbol", "assetAToken", "assetBSymbol", "assetBToken"]
+                ( pfromPDatum @PWrPoolConstantProductDatum
+                    #$ ptryFromInlineDatum
+                    # pool.datum
+                )
+            pure $
+              pisCorrectPool
+                (pfromData datumF.projectSymbol, pfromData datumF.projectToken)
+                (pfromData datumF.raisingSymbol, pfromData datumF.raisingToken)
+                (poolDatum.assetASymbol, poolDatum.assetAToken)
+                (poolDatum.assetBSymbol, poolDatum.assetBToken)
+          PSundae -> unTermCont do
+            let poolRefInput =
+                  ptxInInfoResolved
+                    #$ passertSingleton "D3"
+                    #$ pfilter
+                    # plam (\i -> ppaysToCredential # cfgF.sundaePoolScriptHash #$ ptxInInfoResolved # i)
+                    # tx.referenceInputs
+            pool <- pletFieldsC @'["datum", "value"] poolRefInput
+
+            poolDatum <-
+              pletFieldsC @'["assets", "identifier"]
+                ( pfromPDatum @PSundaePoolDatum
+                    #$ ptryFromInlineDatum
+                    # pool.datum
+                )
+
+            assets <- pletFieldsC @'["a", "b"] poolDatum.assets
+            assetA <- pletFieldsC @'["currencySymbol", "tokenName"] $ assets.a
+            assetB <- pletFieldsC @'["currencySymbol", "tokenName"] $ assets.b
+
+            let assetASymbol = pfromData assetA.currencySymbol
+            let assetAToken = pfromData assetA.tokenName
+
+            let assetBSymbol = pfromData assetB.currencySymbol
+            let assetBToken = pfromData assetB.tokenName
+
+            pure $
+              pand'List
+                [ pisCorrectPool
                     (pfromData datumF.projectSymbol, pfromData datumF.projectToken)
                     (pfromData datumF.raisingSymbol, pfromData datumF.raisingToken)
-                    (poolDatum.assetASymbol, poolDatum.assetAToken)
-                    (poolDatum.assetBSymbol, poolDatum.assetBToken)
-            )
-          ,
-            ( dex #== pcon PSundae
-            , unTermCont do
-                let poolRefInput =
-                      ptxInInfoResolved
-                        #$ passertSingleton "D2s"
-                        #$ pfilter
-                        # plam (\i -> ppaysToCredential # cfgF.sundaePoolScriptHash #$ ptxInInfoResolved # i)
-                        # tx.referenceInputs
-                pool <- pletFieldsC @'["datum", "value"] poolRefInput
-
-                poolDatum <-
-                  pletFieldsC @'["assets", "identifier"]
-                    ( pfromPDatum @PSundaePoolDatum
-                        #$ ptryFromInlineDatum
-                        # pool.datum
-                    )
-
-                assets <- pletFieldsC @'["a", "b"] poolDatum.assets
-                assetA <- pletFieldsC @'["currencySymbol", "tokenName"] $ assets.a
-                assetB <- pletFieldsC @'["currencySymbol", "tokenName"] $ assets.b
-
-                let assetASymbol = pfromData assetA.currencySymbol
-                let assetAToken = pfromData assetA.tokenName
-
-                let assetBSymbol = pfromData assetB.currencySymbol
-                let assetBToken = pfromData assetB.tokenName
-
-                pure $
-                  pand'List
-                    [ pisCorrectPool
-                        (pfromData datumF.projectSymbol, pfromData datumF.projectToken)
-                        (pfromData datumF.raisingSymbol, pfromData datumF.raisingToken)
-                        (assetASymbol, assetAToken)
-                        (assetBSymbol, assetBToken)
-                    , pvalueOf
-                        # pool.value
-                        # (pcon . PCurrencySymbol . pto . pfromData $ cfgF.sundaePoolScriptHash)
-                        # poolSundaeNftName poolDatum.identifier
-                        #== 1
-                    ]
-            )
-          ]
-          -- dex must be either Wr or Sundae
-          (ptraceError "D2")
+                    (assetASymbol, assetAToken)
+                    (assetBSymbol, assetBToken)
+                , pvalueOf
+                    # pool.value
+                    # (pcon . PCurrencySymbol . pto . pfromData $ cfgF.sundaePoolScriptHash)
+                    # poolSundaeNftName poolDatum.identifier
+                    #== 1
+                ]
 
   pure $
     pand'List
-      [ ptraceIfFalse "D3" (poolProofMinted #== 1)
-      , ptraceIfFalse "D4" (pcountOfUniqueTokens # poolProofOut.value #== 2)
-      , ptraceIfFalse "D5" isCorrectPool
-      , ptraceIfFalse "D6" (datumF.dex #== dex)
+      [ ptraceIfFalse "D4" (poolProofMinted #== 1)
+      , ptraceIfFalse "D5" (pcountOfUniqueTokens # poolProofOut.value #== 2)
+      , ptraceIfFalse "D6" isCorrectPool
+      , ptraceIfFalse "D7" (datumF.dex #== dex)
       ]
 
 ppoolProofMintingPolicy :: Term s (PPoolProofPolicyConfig :--> PMintingPolicy)
 ppoolProofMintingPolicy = plam \cfg redeemer context ->
   popaque $
-    perrorIfFalse #$ ptraceIfFalse "D0" $
-      pvalidatePoolProofMinting cfg (pfromData (ptryFrom @(PAsData PDex) redeemer fst)) context
+    perrorIfFalse
+      #$ pvalidatePoolProofMinting cfg (pfromData (ptryFrom @(PAsData PDex) redeemer fst)) context
 
 poolProofMintingPolicy :: PoolProofPolicyConfig -> Script
 poolProofMintingPolicy cfg = toScript $ ppoolProofMintingPolicy # pconstant cfg
