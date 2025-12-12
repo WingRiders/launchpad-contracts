@@ -183,7 +183,7 @@ pcheckedRewards = phoistAcyclic $ plam \rewardsOf presaleSymbol committedSymbol 
     rewardF <- pletFieldsC @'["value", "datum", "address"] (pfromJust # reward)
     rewardValue <- pletC rewardF.value
     rewardDatum <-
-      pletFieldsC @'["owner", "projectSymbol", "projectToken", "raisingSymbol", "raisingToken"]
+      pletFieldsC @'["owner", "projectSymbol", "projectToken", "raisingSymbol", "raisingToken", "createdAt"]
         (pfromPDatum @PRewardsHolderDatum # (ptryFromInlineDatum # rewardF.datum))
     nodeF <- pletFieldsC @'["next", "key", "committed", "createdTime"] node
     expectedRewards <- pletC (rewardsOf # state # node)

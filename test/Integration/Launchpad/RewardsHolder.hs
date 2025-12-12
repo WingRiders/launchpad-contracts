@@ -66,9 +66,10 @@ spendRewardsHolder action config wallet = do
 
   poolProofs <- utxoAt (poolProofValidator config)
 
+  range <- currentTimeRad 1_000
   tx <- case action of
-    NoOwnerSignature -> signTx maliciousPkh $ spendRewardsHolderTx action config poolProofs holderBoxes wallet
-    _ -> signTx wallet $ spendRewardsHolderTx action config poolProofs holderBoxes wallet
+    NoOwnerSignature -> signTx maliciousPkh =<< validateIn range (spendRewardsHolderTx action config poolProofs holderBoxes wallet)
+    _ -> signTx wallet =<< validateIn range (spendRewardsHolderTx action config poolProofs holderBoxes wallet)
   void $ sendTx tx
 
 spendRewardsHolderTx ::

@@ -2,6 +2,7 @@
 
 module Launchpad.RewardsHolder where
 
+import Launchpad.Constants
 import Launchpad.Types
 import Plutarch
 import Plutarch.Api.V2
@@ -12,6 +13,7 @@ import Plutarch.Extra.TermCont
 import Plutarch.Lift
 import Plutarch.PlutusScript
 import Plutarch.Prelude
+import Plutarch.Types.Base
 import Plutarch.Util
 import Plutus.Util
 import PlutusLedgerApi.V2
@@ -29,6 +31,7 @@ data RewardsHolderConfig = RewardsHolderConfig
   , poolProofSymbol :: CurrencySymbol
   , usesWr :: Bool
   , usesSundae :: Bool
+  , withdrawalEndTime :: POSIXTime
   }
   deriving stock (Generic)
 
@@ -44,6 +47,7 @@ data PRewardsHolderConfig (s :: S)
               , "poolProofSymbol" ':= PCurrencySymbol
               , "usesWr" ':= PBool
               , "usesSundae" ':= PBool
+              , "withdrawalEndTime" ':= PPOSIXTime
               ]
           )
       )
@@ -72,13 +76,34 @@ deriving via
         5. The transaction has a PoolProof utxo with a PoolProof token in the reference inputs, the token name must be equal to the PoolProof validator hash
         6. The pool proof must have the same asset classes in the datum as the rewards utxo
         7. The pool proof has Sundae dex field
+      the validation requires AT LEAST one proof to be present, not both
+
+     In case the pool creation is stalled for whatever reason, the rewards are unlocked once sufficient time has passed since the end of the withdrawal period.
 -}
 prewardsHolderValidator :: Term s PRewardsHolderConfig -> Term s PRewardsHolderDatum -> Term s PScriptContext -> Term s PBool
 prewardsHolderValidator cfg datum context = unTermCont do
-  cfgF <- pletFieldsC @'["poolProofValidatorHash", "poolProofSymbol", "usesWr", "usesSundae"] cfg
+  cfgF <-
+    pletFieldsC
+      @'[ "poolProofValidatorHash"
+        , "poolProofSymbol"
+        , "usesWr"
+        , "usesSundae"
+        , "withdrawalEndTime"
+        ]
+      cfg
   contextFields <- pletFieldsC @'["txInfo"] context
-  tx <- pletFieldsC @'["referenceInputs", "signatories", "datums"] contextFields.txInfo
-  datumF <- pletFieldsC @'["owner", "projectSymbol", "projectToken", "raisingSymbol", "raisingToken"] datum
+  tx <- pletFieldsC @'["referenceInputs", "signatories", "datums", "validRange"] contextFields.txInfo
+  datumF <-
+    pletFieldsC
+      @'[ "owner"
+        , "projectSymbol"
+        , "projectToken"
+        , "raisingSymbol"
+        , "raisingToken"
+        ]
+      datum
+
+  PTimestamps lowerTime _ <- pmatchC (pfiniteTxValidityRangeTimestamps # tx.validRange)
 
   let hasCorrectPoolProof dex =
         pany
@@ -109,12 +134,13 @@ prewardsHolderValidator cfg datum context = unTermCont do
   pure $
     pand'List
       [ ptraceIfFalse "M1" signedByOwner
-      , pif cfgF.usesWr (hasCorrectPoolProof (pcon PWr)) ptrue
-      , pif cfgF.usesSundae (hasCorrectPoolProof (pcon PSundae)) ptrue
+      , (pto (lowerTime - cfgF.withdrawalEndTime) #> pconstant emergencyWithdrawalPeriod)
+          #|| (pif cfgF.usesWr (ptraceIfFalse "M1" $ hasCorrectPoolProof (pcon PWr)) pfalse)
+          #|| (pif cfgF.usesSundae (ptraceIfFalse "M2" $ hasCorrectPoolProof (pcon PSundae)) pfalse)
       ]
 
 rewardsHolderValidator :: Term s (PRewardsHolderConfig :--> PValidator)
-rewardsHolderValidator = phoistAcyclic $ plam \cfg rawDatum _redeemer context ->
+rewardsHolderValidator = plam \cfg rawDatum _redeemer context ->
   let datum = ptryFrom @PRewardsHolderDatum rawDatum fst
    in popaque $ perrorIfFalse #$ prewardsHolderValidator cfg datum context
 
