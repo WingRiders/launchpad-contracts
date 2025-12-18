@@ -35,7 +35,7 @@ pvalidateFailProofToken = plam \context -> unTermCont do
   failProofCs <- pletC (pownCurrencySymbol contextF.purpose)
   PPair failProofTn minted <- pmatchC (pvalueOfSingleton tx.mint failProofCs)
   let failProof =
-        passertSingleSpecificInput "one fail proof output"
+        passertSingleSpecificInput "B1"
           # pid
           # ptokenNameAsScriptHash failProofTn
           # failProofCs
@@ -46,8 +46,8 @@ pvalidateFailProofToken = plam \context -> unTermCont do
     pmatchC (pfromPDatum @PFailProofDatum # (ptryFromInlineDatum # failProofF.datum))
   pure $
     pand'List
-      [ ptraceIfFalse "B1" $ minted #== 1
-      , ptraceIfFalse "B2" $
+      [ ptraceIfFalse "B2" $ minted #== 1
+      , ptraceIfFalse "B3" $
           pany
             # plam
               ( \i -> unTermCont do
