@@ -135,7 +135,7 @@ pvalidateCommitTokenInitialization contributionEndTime withdrawalEndTime foldSym
   PTimestamps currentTime _ <- pmatchC timestamps
   foldF <-
     pletFieldsC @'["datum", "value"]
-      ( passertSingleSpecificInput "one commit fold output allowed"
+      ( passertSingleSpecificInput "A1"
           # plam id
           # ptokenNameAsScriptHash foldToken
           # foldSymbol
@@ -148,7 +148,7 @@ pvalidateCommitTokenInitialization contributionEndTime withdrawalEndTime foldSym
   nodeScriptHash <- pletC foldD.nodeScriptHash
   nodeF <-
     pletFieldsC @'["datum", "value"]
-      ( passertSingleSpecificInput "one node reference input allowed"
+      ( passertSingleSpecificInput "A2"
           # ptxInInfoResolved
           # nodeScriptHash
           # nodeSymbol
@@ -158,28 +158,28 @@ pvalidateCommitTokenInitialization contributionEndTime withdrawalEndTime foldSym
   nodeD <- pletFieldsC @'["key", "next"] $ pfromPDatum @PNode # (ptryFromInlineDatum # nodeF.datum)
   pure $
     pand'List
-      [ ptraceIfFalse "A1" $ currentTime #> withdrawalEndTime
-      , ptraceIfFalse "A2" $ pfromData foldD.committed #== 0
-      , ptraceIfFalse "A3" $ foldD.next #== nodeD.next
-      , ptraceIfFalse "A4" $ pfromData foldD.nodeCount #== 1
-      , ptraceIfFalse "A5" $ pisPubKeyAddress foldD.owner
-      , ptraceIfFalse "A6" $ pnot # (pisStakePtrAddress foldD.owner)
+      [ ptraceIfFalse "A3" $ currentTime #> withdrawalEndTime
+      , ptraceIfFalse "A4" $ pfromData foldD.committed #== 0
+      , ptraceIfFalse "A5" $ foldD.next #== nodeD.next
+      , ptraceIfFalse "A6" $ pfromData foldD.nodeCount #== 1
+      , ptraceIfFalse "A7" $ pisPubKeyAddress foldD.owner
+      , ptraceIfFalse "A8" $ pnot # (pisStakePtrAddress foldD.owner)
       , pmatch foldD.cutoffTime \case
           PDJust timeR ->
             plet (pfromData . pfromData $ pfield @"_0" # timeR) \time ->
               plet (pfromData $ pfromDJust # foldD.cutoffKey) \key ->
                 pand'List
-                  [ ptraceIfFalse "A7" $ pfromData foldD.overcommitted #>= 0
-                  , ptraceIfFalse "A8" $ time #< contributionEndTime
-                  , ptraceIfFalse "A9" $ plengthBS # (pfromData $ pfstBuiltin # key) #== pconstant expectedPkhLength
-                  , ptraceIfFalse "A10" $ pbetween (pconstant $ minNodeIndex - 1) (pfromData $ psndBuiltin # key) (pconstant $ maxNodeIndex + 1)
+                  [ ptraceIfFalse "A9" $ pfromData foldD.overcommitted #>= 0
+                  , ptraceIfFalse "A10" $ time #< contributionEndTime
+                  , ptraceIfFalse "A11" $ plengthBS # (pfromData $ pfstBuiltin # key) #== pconstant expectedPkhLength
+                  , ptraceIfFalse "A12" $ pbetween (pconstant $ minNodeIndex - 1) (pfromData $ psndBuiltin # key) (pconstant $ maxNodeIndex + 1)
                   ]
           PDNothing _ ->
             pand'List
-              [ ptraceIfFalse "A11" $ pfromData foldD.overcommitted #== 0
-              , ptraceIfFalse "A12" $ pisDNothing # foldD.cutoffKey
+              [ ptraceIfFalse "A13" $ pfromData foldD.overcommitted #== 0
+              , ptraceIfFalse "A14" $ pisDNothing # foldD.cutoffKey
               ]
-      , ptraceIfFalse "A13" $ pisDNothing # (nodeD.key)
+      , ptraceIfFalse "A15" $ pisDNothing # (nodeD.key)
       ]
 
 commitFoldMintingPolicy :: CommitFoldPolicyConfig -> Script
