@@ -158,19 +158,14 @@ instance DerivePlutusType PTokensHolderFinalRedeemer where
 instance PTryFrom PData (PAsData PTokensHolderFinalRedeemer)
 
 {- |
-TODO: fix all the docs
-
-    The pool doesn't exist:
-        there is a compensation output sent to the launchpad owner
+    The normal flow (pool creation):
         there is a pool output utxo with the correct pool validity token
-        the pool output datum contains the correct asset pair
+        the pool is from the correct dex stored in the datum
         there is a vesting contract output utxo
         the vesting contract output has all the shares given to the user by the pool
         the vesting contract output holds at most 2 unique tokens, ADA and shares
-        a Dao fee is sent to the DAO wallet:
-            all the remaining raised tokens times raisedTokensPoolPartPercentage divided by 100 are locked in the pool
-        DAO wallet utxo holds at most 2 unique tokens, ADA and raised token
-        all the project tokens from the launchpad project tokens holder utxo are locked in the pool
+        the raised tokens are locked in the pool (also ensures pool assets)
+        the project tokens are locked in the pool (also ensures pool assets)
         the beneficiary of the vesting contract is the launchpad owner
         the vestingAsset of the vesting contract is the pool shares
         the totalVestingQty of the vesting contract is the total amount of shares given to the user
@@ -181,15 +176,23 @@ TODO: fix all the docs
             the vestingPeriodStart + a predetermined value
         the totalInstallments of the vesting contract is a predetermined value
         there are two script inputs
-        there is a factory script in the inputs
-    The pool exists:
-        there is a compensation output sent to the launchpad owner
-        there is a pool proof utxo ref input
-        there is a utxo output sent to the DAO wallet's address, its value is:
-            the receiving tokens of the launchpad project tokens holder times raisedTokensPoolPartPercentage
-            divided by 100 + the Dao fee + all of its project tokens
-        DAO wallet utxo holds at most 3 unique tokens, ADA project token, raised token
-        there are two script inputs
+        for Wr:
+          there is a factory script in the inputs
+        for Sundae:
+          the locked pool creation fee matches the settings pool creation fee exactly
+          the locked pool creation fee is below or equal to the tolerance
+
+    The failed flow (no pool is created):
+        there is a utxo output sent to the DAO wallet's address
+        the DAO wallet utxo holds at most 3 unique token: ADA, project token, raised token
+        the DAO wallet utxo holds all project & raised tokens from the project tokens holder
+        there is one script input
+        for Wr:
+          there is a pool proof utxo ref input with Wr datum
+        for Sundae:
+          there is a Sundae settings utxo ref input
+          the settings utxo has the correct nft
+          the settings' pool creation fee is above the tolerance
 -}
 projectTokensHolderValidatorTyped ::
   Term s PTokensHolderFinalConfig ->
