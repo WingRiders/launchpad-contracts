@@ -609,28 +609,28 @@ pvalidateStartRewardsFold
 
     pure $
       pand'List
-        [ ptraceIfFalse "H70" $ pisDNothing # nodeD.key
-        , ptraceIfFalse "H71" $ pisDJust # nodeD.next
-        , ptraceIfFalse "H72" $ pvalueOf # mint # nodeCs # pscriptHashToTokenName selfValidatorHash #== (-1)
-        , ptraceIfFalse "H73" $ pvalueOf # mint # commitFoldCs # pscriptHashToTokenName commitFoldValidatorHash #== (-1)
-        , ptraceIfFalse "H74" $ pvalueOf # rewardsFoldF.value # padaSymbol # padaToken #>= oilAda
-        , ptraceIfFalse "H75" $ pcountOfUniqueTokens # rewardsFoldF.value #== 2
-        , ptraceIfFalse "H58" $ rewardsFoldD.committed #== commitFoldD.committed
-        , ptraceIfFalse "H59" $ rewardsFoldD.overcommitted #== commitFoldD.overcommitted
-        , ptraceIfFalse "H60" $ rewardsFoldD.cutoffKey #== commitFoldD.cutoffKey
-        , ptraceIfFalse "H61" $ rewardsFoldD.cutoffTime #== commitFoldD.cutoffTime
-        , ptraceIfFalse "H62" $ rewardsFoldD.commitFoldOwner #== commitFoldD.owner
-        , ptraceIfFalse "H63" $ rewardsFoldD.next #== nodeD.next
-        , ptraceIfFalse "H64" $ rewardsFoldD.nodeScriptHash #== selfValidatorHash
+        [ ptraceIfFalse "H58" $ pisDNothing # nodeD.key
+        , ptraceIfFalse "H59" $ pisDJust # nodeD.next
+        , ptraceIfFalse "H60" $ pvalueOf # mint # nodeCs # pscriptHashToTokenName selfValidatorHash #== (-1)
+        , ptraceIfFalse "H61" $ pvalueOf # mint # commitFoldCs # pscriptHashToTokenName commitFoldValidatorHash #== (-1)
+        , ptraceIfFalse "H62" $ pvalueOf # rewardsFoldF.value # padaSymbol # padaToken #>= oilAda
+        , ptraceIfFalse "H63" $ pcountOfUniqueTokens # rewardsFoldF.value #== 2
+        , ptraceIfFalse "H64" $ rewardsFoldD.committed #== commitFoldD.committed
+        , ptraceIfFalse "H65" $ rewardsFoldD.overcommitted #== commitFoldD.overcommitted
+        , ptraceIfFalse "H66" $ rewardsFoldD.cutoffKey #== commitFoldD.cutoffKey
+        , ptraceIfFalse "H67" $ rewardsFoldD.cutoffTime #== commitFoldD.cutoffTime
+        , ptraceIfFalse "H68" $ rewardsFoldD.commitFoldOwner #== commitFoldD.owner
+        , ptraceIfFalse "H69" $ rewardsFoldD.next #== nodeD.next
+        , ptraceIfFalse "H70" $ rewardsFoldD.nodeScriptHash #== selfValidatorHash
         , pmatch rewardsFoldD.cutoffTime \case
-            PDJust _ -> ptraceIfFalse "H65" $ rewardsFoldD.committed #== maxCommitment
+            PDJust _ -> ptraceIfFalse "H71" $ rewardsFoldD.committed #== maxCommitment
             PDNothing _ ->
               pand'List
-                [ ptraceIfFalse "H66" $ rewardsFoldD.committed #>= minCommitment
-                , ptraceIfFalse "H67" $ rewardsFoldD.committed #< maxCommitment
+                [ ptraceIfFalse "H72" $ rewardsFoldD.committed #>= minCommitment
+                , ptraceIfFalse "H73" $ rewardsFoldD.committed #< maxCommitment
                 ]
-        , ptraceIfFalse "H68" $ commitFoldD.nodeScriptHash #== selfValidatorHash
-        , ptraceIfFalse "H69" $ pisDNothing # commitFoldD.next
+        , ptraceIfFalse "H74" $ commitFoldD.nodeScriptHash #== selfValidatorHash
+        , ptraceIfFalse "H75" $ pisDNothing # commitFoldD.next
         ]
 
 {- | Validate the launchpad failure.
@@ -744,23 +744,23 @@ pvalidateLaunchpadFailure
 
     pure $
       pand'List
-        [ ptraceIfFalse "H79" $ commitFoldD.nodeScriptHash #== selfValidatorHash
-        , ptraceIfFalse "H80" $ pisDNothing # commitFoldD.next
-        , ptraceIfFalse "H81" $ pisDNothing # commitFoldD.cutoffTime
-        , ptraceIfFalse "H82" $ pfromData commitFoldD.committed #< minCommitment
-        , ptraceIfFalse "H90" $ isDaoCompensated daoCollateral
-        , ptraceIfFalse "H91" $ isCommitFoldOwnerCompensated commitFoldCollateral commitFoldD.owner
+        [ ptraceIfFalse "H78" $ commitFoldD.nodeScriptHash #== selfValidatorHash
+        , ptraceIfFalse "H79" $ pisDNothing # commitFoldD.next
+        , ptraceIfFalse "H80" $ pisDNothing # commitFoldD.cutoffTime
+        , ptraceIfFalse "H81" $ pfromData commitFoldD.committed #< minCommitment
+        , ptraceIfFalse "H82" $ isDaoCompensated daoCollateral
+        , ptraceIfFalse "H83" $ isCommitFoldOwnerCompensated commitFoldCollateral commitFoldD.owner
         , -- head node, commit fold, project tokens holder
-          ptraceIfFalse "H78" $ pcountAllScriptInputs # inputs #== 3
-        , ptraceIfFalse "H83" $ pisDNothing # nodeD.key
-        , ptraceIfFalse "H84" $ pvalueOf # mint # nodeCs # pscriptHashToTokenName selfValidatorHash #== (-1)
-        , ptraceIfFalse "H85" $ pvalueOf # mint # commitFoldCs # pscriptHashToTokenName commitFoldValidatorHash #== (-1)
-        , ptraceIfFalse "H86" $ pvalueOf # mint # projectTokensHolderCs # pscriptHashToTokenName projectTokensHolderValidatorHash #== (-1)
-        , ptraceIfFalse "H87" $ pfromData failProofStoredNodeHash #== selfValidatorHash
+          ptraceIfFalse "H84" $ pcountAllScriptInputs # inputs #== 3
+        , ptraceIfFalse "H85" $ pisDNothing # nodeD.key
+        , ptraceIfFalse "H86" $ pvalueOf # mint # nodeCs # pscriptHashToTokenName selfValidatorHash #== (-1)
+        , ptraceIfFalse "H87" $ pvalueOf # mint # commitFoldCs # pscriptHashToTokenName commitFoldValidatorHash #== (-1)
+        , ptraceIfFalse "H88" $ pvalueOf # mint # projectTokensHolderCs # pscriptHashToTokenName projectTokensHolderValidatorHash #== (-1)
+        , ptraceIfFalse "H89" $ pfromData failProofStoredNodeHash #== selfValidatorHash
         , -- ada and fail proof token
-          ptraceIfFalse "H88" $ pcountOfUniqueTokens # failProofF.value #== 2
+          ptraceIfFalse "H90" $ pcountOfUniqueTokens # failProofF.value #== 2
         , -- The owner's project tokens are returned
-          ptraceIfFalse "H89" $
+          ptraceIfFalse "H91" $
             pany
               # plam
                 ( \o -> unTermCont do
