@@ -116,12 +116,12 @@ prewardsHolderValidator cfg datum context = unTermCont do
                         pfromPDatum @PPoolProofDatum #$ ptryFromInlineDatum #$ ptxOutDatum # poolProof
                     pure $
                       pand'List
-                        [ ptraceIfFalse "M3" (ptxOutHasAssociatedToken cfgF.poolProofSymbol poolProof)
-                        , ptraceIfFalse "M4" $ datumF.projectSymbol #== poolProofDatum.projectSymbol
-                        , ptraceIfFalse "M5" $ datumF.projectToken #== poolProofDatum.projectToken
-                        , ptraceIfFalse "M6" $ datumF.raisingSymbol #== poolProofDatum.raisingSymbol
-                        , ptraceIfFalse "M7" $ datumF.raisingToken #== poolProofDatum.raisingToken
-                        , ptraceIfFalse "M8" $ poolProofDatum.dex #== dex
+                        [ ptraceIfFalse "M1" (ptxOutHasAssociatedToken cfgF.poolProofSymbol poolProof)
+                        , ptraceIfFalse "M2" $ datumF.projectSymbol #== poolProofDatum.projectSymbol
+                        , ptraceIfFalse "M3" $ datumF.projectToken #== poolProofDatum.projectToken
+                        , ptraceIfFalse "M4" $ datumF.raisingSymbol #== poolProofDatum.raisingSymbol
+                        , ptraceIfFalse "M5" $ datumF.raisingToken #== poolProofDatum.raisingToken
+                        , ptraceIfFalse "M6" $ poolProofDatum.dex #== dex
                         ]
             )
           # tx.referenceInputs
@@ -133,10 +133,10 @@ prewardsHolderValidator cfg datum context = unTermCont do
 
   pure $
     pand'List
-      [ ptraceIfFalse "M1" signedByOwner
+      [ ptraceIfFalse "M7" signedByOwner
       , (pto (lowerTime - cfgF.withdrawalEndTime) #> pconstant emergencyWithdrawalPeriod)
-          #|| (pif cfgF.usesWr (ptraceIfFalse "M1" $ hasCorrectPoolProof (pcon PWr)) pfalse)
-          #|| (pif cfgF.usesSundae (ptraceIfFalse "M2" $ hasCorrectPoolProof (pcon PSundae)) pfalse)
+          #|| (pif cfgF.usesWr (ptraceIfFalse "M8" $ hasCorrectPoolProof (pcon PWr)) pfalse)
+          #|| (pif cfgF.usesSundae (ptraceIfFalse "M9" $ hasCorrectPoolProof (pcon PSundae)) pfalse)
       ]
 
 rewardsHolderValidator :: Term s (PRewardsHolderConfig :--> PValidator)
