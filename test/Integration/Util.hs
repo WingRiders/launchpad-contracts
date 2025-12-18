@@ -134,7 +134,7 @@ good config msg t =
         <> singleton (CurrencySymbol (unwrapScriptHash config.sundaePoolScriptHash)) (poolSundaeLpName mockSundaeIdentifier) 1_000_000
         <> singleton (CurrencySymbol (unwrapScriptHash config.sundaePoolScriptHash)) (poolSundaeNftName mockSundaeIdentifier) 1
         <> assetClassValue (assetClass mockWrPoolCurrencySymbol "lpShare") 1_000
-        <> assetClassValue (assetClass mockWrPoolCurrencySymbol C.lpValidityTokenName) 1
+        <> assetClassValue (assetClass mockWrPoolCurrencySymbol C.wrLpValidityTokenName) 1
         -- ProjectTokensHolder Validity Token (in the Admin wallet [getMainUser])
         <> assetClassValue (assetClass (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config)) (scriptHashToTokenName (PTHFirst.projectTokensHolderScriptValidatorHash (firstTokensHolderConfig config)))) 1
         <> assetClassValue

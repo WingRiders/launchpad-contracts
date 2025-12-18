@@ -101,7 +101,7 @@ pvalidatePoolProofMinting cfg dex context = unTermCont do
                     # ptxInInfoResolved
                     # cfgF.wrPoolValidatorHash
                     # cfgF.wrPoolSymbol
-                    # (pconstant C.lpValidityTokenName)
+                    # (pconstant C.wrLpValidityTokenName)
                     # tx.referenceInputs
             pool <- pletFieldsC @'["datum"] poolRefInput
             poolDatum <-

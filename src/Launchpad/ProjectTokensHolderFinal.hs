@@ -536,7 +536,7 @@ pvalidateNormalFlowWr
           ptryFindOutputWithAsset
             # poolValidatorHash
             # poolCs
-            # pconstant C.lpValidityTokenName
+            # pconstant C.wrLpValidityTokenName
             # 1
             # txOutputs
 

@@ -76,6 +76,9 @@ mockSettingsDatum =
     , _extensions = toBuiltinData ()
     }
 
+maxShareTokens :: Num a => a
+maxShareTokens = 9_223_372_036_854_775_807
+
 spendHolderCreatePool :: MaliciousTokensHolderAction -> Dex -> LaunchpadConfig -> PubKeyHash -> PubKeyHash -> Run ()
 spendHolderCreatePool action dex config@LaunchpadConfig {..} wallet signer = do
   let shareQuantity p r = floor @Double (sqrt (fromIntegral (p * r)))
@@ -151,16 +154,16 @@ spendHolderCreatePool action dex config@LaunchpadConfig {..} wallet signer = do
           <> assetClassValue raisingToken raisedTokensQty
 
       nftTn = case dex of
-        Wr -> C.lpValidityTokenName
+        Wr -> C.wrLpValidityTokenName
         Sundae -> poolSundaeNftName mockSundaeIdentifier
       poolToken = case dex of
-        Wr -> singleton wrPoolCurrencySymbol C.lpValidityTokenName 1
+        Wr -> singleton wrPoolCurrencySymbol C.wrLpValidityTokenName 1
         Sundae -> singleton lpShareCs (poolSundaeNftName mockSundaeIdentifier) 1
 
       mintedShares = shareQuantity projectTokensQty raisedTokensQty
 
       poolShares = case dex of
-        Wr -> singleton lpShareCs lpShareTn (C.maxShareTokens - mintedShares)
+        Wr -> singleton lpShareCs lpShareTn (maxShareTokens - mintedShares)
         Sundae -> mempty
 
       mintedValue =

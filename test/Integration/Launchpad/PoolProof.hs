@@ -137,6 +137,9 @@ createPoolProofTx action dex config poolRef =
     AssetClass (projectSymbol, projectToken) = config.projectToken
     AssetClass (raisingSymbol, raisingToken) = config.raisingToken
 
+poolOilAda :: Num a => a
+poolOilAda = 3_000_000
+
 createPoolUtxo :: MaliciousPoolProofAction -> Dex -> LaunchpadConfig -> PubKeyHash -> Run ()
 createPoolUtxo
   action
@@ -152,13 +155,13 @@ createPoolUtxo
     let identifier = mockSundaeIdentifier
         value = case dex of
           Wr ->
-            assetClassValue adaAssetClass C.poolOilAda
+            assetClassValue adaAssetClass poolOilAda
               <> assetClassValue raisingToken 10_000
               <> assetClassValue (assetClass wrPoolCurrencySymbol "lpShare") 1_000
-              <> assetClassValue (assetClass wrPoolCurrencySymbol C.lpValidityTokenName) 1
+              <> assetClassValue (assetClass wrPoolCurrencySymbol C.wrLpValidityTokenName) 1
               <> assetClassValue projectToken 10_000
           Sundae ->
-            assetClassValue adaAssetClass C.poolOilAda
+            assetClassValue adaAssetClass poolOilAda
               <> assetClassValue raisingToken 10_000
               <> singleton (CurrencySymbol (unwrapScriptHash sundaePoolScriptHash)) (poolSundaeNftName identifier) 1
               <> assetClassValue projectToken 10_000

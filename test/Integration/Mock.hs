@@ -119,7 +119,7 @@ setupWallets config = do
     newUser $
       defaultTokens
         <> assetClassValue (assetClass mockWrPoolCurrencySymbol "lpShare") 1_000
-        <> assetClassValue (assetClass mockWrPoolCurrencySymbol C.lpValidityTokenName) 1
+        <> assetClassValue (assetClass mockWrPoolCurrencySymbol C.wrLpValidityTokenName) 1
   admin <- getMainUser
 
   -- This initializes wallets **#6** and **#7** and adds them to the Mock,
@@ -259,6 +259,25 @@ defaultLaunchpadConfig =
     , oilAda = oilAdaAmount
     }
 
+agentFeeAdaWr :: Num a => a
+agentFeeAdaWr = 2_000_000
+
+swapFeeInBasisWr :: Num a => a
+swapFeeInBasisWr = 30
+
+protocolFeeInBasisWr :: Num a => a
+protocolFeeInBasisWr = 5
+
+projectFeeInBasisWr :: Num a => a
+projectFeeInBasisWr = 0
+
+reserveFeeInBasisWr :: Num a => a
+reserveFeeInBasisWr = 0
+
+-- | The basis of any fee
+feeBasisWr :: Num a => a
+feeBasisWr = 10_000
+
 wrDatum :: AssetClass -> AssetClass -> WrPoolConstantProductDatum
 wrDatum projectToken raisingToken =
   WrPoolConstantProductDatum
@@ -274,12 +293,12 @@ wrDatum projectToken raisingToken =
     , projectTreasuryB = 0
     , reserveTreasuryA = 0
     , reserveTreasuryB = 0
-    , agentFeeAda = C.agentFeeAda
-    , swapFeeInBasis = C.swapFeeInBasis
-    , protocolFeeInBasis = C.protocolFeeInBasis
-    , projectFeeInBasis = C.projectFeeInBasis
-    , reserveFeeInBasis = C.reserveFeeInBasis
-    , feeBasis = C.feeBasis
+    , agentFeeAda = agentFeeAdaWr
+    , swapFeeInBasis = swapFeeInBasisWr
+    , protocolFeeInBasis = protocolFeeInBasisWr
+    , projectFeeInBasis = projectFeeInBasisWr
+    , reserveFeeInBasis = reserveFeeInBasisWr
+    , feeBasis = feeBasisWr
     , projectBeneficiary = Nothing
     , reserveBeneficiary = Nothing
     , poolSpecifics = WrConstantProductPoolDatum
