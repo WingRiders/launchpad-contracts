@@ -423,7 +423,6 @@ pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
   - at least "emergencyWithdrawalPeriod" amount of time has passed since the withdrawalEndTime
   - the transaction is signed by the commit fold owner
 
-  TODO: adjust the docs for 2 dexes
   Rewards fold:
   - the amount of burned node tokens is equal to the number of nodes in the inputs
   - there is a R 0,i rewards fold utxo in the inputs, its validator is run
@@ -434,12 +433,15 @@ pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
   - each reward output has the corresponding owner's node key stored in its datum and stores the token asset classes used in the project
   - a new project tokens holder T' output utxo is created
   - the staking credential of T' is the same as of the T
-  - the value of T' is the value of T minus the distributed project tokens plus the collected committed tokens
   - if the last processed node has a next key equal to nothing
     - the ADA value of R 0,i plus 2 ADA per processed node must be sent the commitFoldOwner address
     - the rewards fold token must be burned
-    - the address of T' must be the final WingRiders version (ProjectTokensHolderFinal)
-    - the datum of T' must be equal to WrTokensHolder
+    - the project tokens holder token must be burned
+    - the script address of T' must be equal to the project tokens holder final validator
+    - there is a T' for each used dex, the dex is stored in the datum
+    - a dao fee (configured percentage) in raised tokens is sent to the DAO wallet
+    - the launch owner is compensated (configured percentage) with the raised tokens
+    - the rest of the tokens are split (configured percentage) between the used dexes
   - for every input node, there is a corresponding user reward utxo when node.committed /= 0
     - if the node.createdTime > just value of the cutoffTime
       OR the node.createdTime == cutoffTime but the node.key > cutoffKey
@@ -456,6 +458,7 @@ pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
       and the tier token if it was contained in the node
     - the staking credential of the reward output must be the same as of the corresponding node
   - if the last processed node.next is a just value
+    - the value of T' is the value of T minus the distributed project tokens plus the collected committed tokens
     - there is a R 0,t rewards fold utxo in the outputs with the rewards fold token
     - if there haven't been any raisingTokens collected yet expect 3 unique tokens else expect 4
     - the value of R 0,t is equal to the value of R 0,i plus 2 ADA per each processed node
@@ -816,7 +819,7 @@ pcheckLastRewardsFold
                   , ptraceIfFalse "L39" $ isHolderOutputCorrect outSundae (pcon PSundae) sundaeHolderCommittedOut sundaeHolderProjectOut
                   ]
             )
-        , -- We burn the rewards fold tokens
+        , -- We burn the rewards fold token and the project tokens holder token
           ptraceIfFalse "L40" $ pvalueOf # mint # selfCs # pscriptHashToTokenName selfValidatorHash #== -1
         , ptraceIfFalse "L41" $ pvalueOf # mint # projectTokensHolderCs # pscriptHashToTokenName projectTokensHolderFirstValidatorHash #== -1
         , -- The commit fold compensations can't be reused as a node compensation
