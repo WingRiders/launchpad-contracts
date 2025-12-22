@@ -47,6 +47,9 @@ data TokensHolderPolicyConfig = TokensHolderPolicyConfig
   , projectSymbol :: CurrencySymbol
   , projectToken :: TokenName
   , collateral :: Integer
+  -- ^ Must be at least 2 ada per used DEX plus 2 ada for the dao fee utxo
+  -- The rest is returned if the launch is succesful.
+  -- If the launch is failed (not cancelled), the collateral is split between the commit fold owner and the dao fee receiver
   , starter :: TxOutRef
   , nodeSymbol :: CurrencySymbol
   }

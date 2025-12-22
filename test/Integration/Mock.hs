@@ -44,22 +44,42 @@ import Test.Util (
 
 data LaunchpadConfig = LaunchpadConfig
   { owner :: Address
+  -- ^ The owner of the launch, supplies the project tokens
   , splitBps :: Integer
+  -- ^ A value between 0 and 10_000, specifies a split of liquidity between Sundae and Wr pools
+  -- 0 means everything goes to Sundae
+  -- 10_000 means everything goes to Wr
   , wrPoolValidatorHash :: ScriptHash
+  -- ^ The script hash of the Wr V2 Constant Product pool
   , wrFactoryValidatorHash :: ScriptHash
+  -- ^ The script hash of the Wr V2 factory
   , wrPoolCurrencySymbol :: CurrencySymbol
+  -- ^ The currency symbol of the Wr V2 pool policy
   , sundaePoolScriptHash :: ScriptHash
+  -- ^ The script hash of the Sundae V3 pool
   , sundaeFeeTolerance :: Integer
+  -- ^ The max amount of ada it is tolerable to pay to create a Sundae pool
+  -- Note that the actual amount is hopefully less and is controlled by the Sundae settings utxo.
+  -- In case the settings specify a value above the tolerance, no Sundae pool is created.
   , sundaeSettingsCurrencySymbol :: CurrencySymbol
+  -- ^ The currency symbol of the Sundae settings NFT.
   , startTime :: POSIXTime
-  -- ^ The start time is set to the lowest of the tiers start times.
+  -- ^ The start time must be set to the lowest of the tiers start times.
   , contributionEndTime :: POSIXTime
+  -- ^ The time after which users no longer can contribute to the launch.
   , withdrawalEndTime :: POSIXTime
+  -- ^ The time after which users no longer can withdraw from the launch.
+  -- the withdrawalEndTime must be after the contributionEndTime
   , projectToken :: AssetClass
+  -- ^ The asset that is being launched
   , raisingToken :: AssetClass
+  -- ^ The assets that is being raised
   , projectMinCommitment :: Integer
+  -- ^ The min possible amount of tokens the launchpad can raise.
+  -- In case less raised tokens are collected, the launch is considered failed and tokens are returned back.
   , projectMaxCommitment :: Integer
   -- ^ The maximum amount of tokens the launchpad can raise.
+  -- Can be set to max int64 value to essentially remove the cap.
   , totalTokens :: Integer
   -- ^ The total number of the project tokens committed to the launchpad.
   , tokensToDistribute :: Integer
@@ -67,26 +87,55 @@ data LaunchpadConfig = LaunchpadConfig
   , raisedTokensPoolPartPercentage :: Integer
   -- ^ The percentage of the raised tokens to place into the pool.
   , daoFeeNumerator :: Integer
+  -- ^ Controls the dao fee collected in raised tokens
   , daoFeeDenominator :: Integer
+  -- ^ Controls the dao fee collected in raised tokens
   , daoFeeReceiver :: Address
+  -- ^ Controls the address where the dao fee is sent
   , daoAdmin :: PubKeyHash
+  -- ^ Controls the pub key hash of a dao admin.
+  -- This signer can add separator nodes (the launch owner can do that as well).
   , collateral :: Integer
+  -- ^ How much collateral (in Lovelace) is locked into the launch
+  -- Must be at least 2 ada per used DEX plus 2 ada for the dao fee utxo
+  -- The rest is returned if the launch is succesful.
+  -- If the launch is failed (not cancelled), the collateral is split between the commit fold owner and the dao fee receiver
   , starter :: TxOutRef
+  -- ^ The tx out ref of the utxo that has to be spent to uniquely identify a launch
   , vestingPeriodDuration :: POSIXTime
+  -- ^ Configures the duration period of the vesting utxo which holds the owner's shares
   , vestingPeriodDurationToFirstUnlock :: POSIXTime
+  -- ^ Configures the duration period to first unlock of the vesting utxo which holds the owner's shares
   , vestingPeriodInstallments :: Integer
+  -- ^ Configures the number of installments of the vesting utxo which holds the owner's shares
   , vestingPeriodStart :: POSIXTime
+  -- ^ Configures the start of the vesting utxo which holds the owner's shares
   , vestingValidatorHash :: ScriptHash
+  -- ^ Configures the validator hash of the vesting utxo which holds the owner's shares
   , presaleTierCs :: CurrencySymbol
+  -- ^ The currency symbol of the presale tier token
+  -- Note that the token name is not checked.
+  -- That allows using NFTs on the same policy as presale tokens.
   , presaleTierStartTime :: POSIXTime
+  -- ^ The commitment start time of the presale tier
   , defaultStartTime :: POSIXTime
+  -- ^ The commitment start time of the default tier
   , presaleTierMinCommitment :: Integer
+  -- ^ The min user commitment of the presale tier
   , defaultTierMinCommitment :: Integer
+  -- ^ The min user commitment of the default tier
   , presaleTierMaxCommitment :: Integer
+  -- ^ The max user commitment of the presale tier
   , defaultTierMaxCommitment :: Integer
+  -- ^ The max user commitment of the  tier
   , nodeAda :: Integer
+  -- ^ The amount of ada a commitment node must hold.
+  -- This ada is used up to compensate the folds and to create a user rewards holder.
   , commitFoldFeeAda :: Integer
+  -- ^ The amount of ada the commit fold gets per each folded node.
   , oilAda :: Integer
+  -- ^ The min amount of ada various utxos are expected to held.
+  -- This includes the rewards holder, dao fee, and final project tokens holder.
   }
   deriving (Show, Eq, Ord)
 

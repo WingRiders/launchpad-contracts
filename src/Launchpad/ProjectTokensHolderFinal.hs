@@ -140,12 +140,14 @@ pwrShareTokenName raisingSymbol raisingToken projectSymbol projectToken =
     bScaleHash = blake2b_256 $ encodeUtf8 "1"
     staticPart = poolTypeIdHash <> aScaleHash <> bScaleHash
 
+-- Encoded as an integer
 data TokensHolderFinalRedeemer
   = FailedFlow
   | NormalFlow
   deriving stock (Generic, Enum, Bounded)
   deriving (PlutusTx.ToData, PlutusTx.FromData) via (EnumIsData TokensHolderFinalRedeemer)
 
+-- Encoded as an integer
 data PTokensHolderFinalRedeemer (s :: S)
   = PFailedFlow
   | PNormalFlow
