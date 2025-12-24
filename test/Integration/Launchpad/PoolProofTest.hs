@@ -53,12 +53,14 @@ spendTests =
 create_pool_proof :: MaliciousPoolProofAction -> LaunchpadConfig -> Run ()
 create_pool_proof action config = do
   Wallets {..} <- setupWallets config
+
   createPoolUtxo action Wr config poolInitWallet
   createPoolProof action Wr config userWallet2
 
 create_and_spend_pool_proof :: LaunchpadConfig -> Run ()
 create_and_spend_pool_proof config = do
   Wallets {..} <- setupWallets config
+
   createPoolUtxo None Wr config poolInitWallet
   createPoolProof None Wr config userWallet1
   spendPoolProof config userWallet1

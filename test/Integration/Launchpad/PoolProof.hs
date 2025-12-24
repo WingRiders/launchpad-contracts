@@ -150,6 +150,7 @@ createPoolUtxo
     , wrPoolCurrencySymbol
     , wrPoolValidatorHash
     , sundaePoolScriptHash
+    , sundaeFee
     }
   wallet = do
     let identifier = mockSundaeIdentifier
@@ -186,7 +187,7 @@ createPoolUtxo
             (Sundae, IncorrectPoolHash) ->
               payToScript
                 (TypedValidatorHash @SundaePoolDatum (toV2 maliciousScriptHash))
-                (InlineDatum datumForSundae)
+                (InlineDatum (datumForSundae sundaeFee))
                 value
             (Wr, _) ->
               payToScript
@@ -196,6 +197,6 @@ createPoolUtxo
             (Sundae, _) ->
               payToScript
                 (TypedValidatorHash @SundaePoolDatum (toV2 sundaePoolScriptHash))
-                (InlineDatum datumForSundae)
+                (InlineDatum (datumForSundae sundaeFee))
                 value
         ]

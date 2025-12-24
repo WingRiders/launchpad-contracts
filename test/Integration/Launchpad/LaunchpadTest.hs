@@ -16,7 +16,7 @@ import Integration.Launchpad.Node qualified as Node
 import Integration.Launchpad.Options (ThoroughTests (..))
 import Integration.Launchpad.PoolProof (createPoolProof, createPoolUtxo)
 import Integration.Launchpad.PoolProof qualified as PP
-import Integration.Launchpad.ProjectTokensHolderFinal (spendHolderCreatePool, spendHolderPoolExists)
+import Integration.Launchpad.ProjectTokensHolderFinal (spendHolderCreatePool, spendHolderFundsToDao)
 import Integration.Launchpad.ProjectTokensHolderFinal qualified as PTHF
 import Integration.Launchpad.ProjectTokensHolderFirst
 import Integration.Launchpad.RewardsFold (RewardsFoldApplicationConfig, RewardsFoldIteration (..), createRewardsFoldRefScript, initRewardsFold, iteration, nodeKeys, rewardsFoldOver)
@@ -73,22 +73,22 @@ cancelTests = askOption \(ThoroughTests thorough) ->
 completeTests :: TestTree
 completeTests = askOption \(ThoroughTests thourough) ->
   testGroup "Whole Launchpad" $
-    [ good defaultLaunchpadConfig "Whole launchpad flow - No Pool - Wr" (run_launchpad NoPool)
-    , good defaultLaunchpadConfig {splitBps = 0} "Whole launchpad flow - No Pool - Sundae" (run_launchpad NoPool)
-    , good defaultLaunchpadConfig {splitBps = 5_000} "Whole launchpad flow - No Pool - Wr and Sundae" (run_launchpad NoPool)
+    [ good defaultLaunchpadConfig "Whole launchpad flow - Wr - Success" (run_launchpad NoPool)
+    , good defaultLaunchpadConfig {splitBps = 0} "Whole launchpad flow - Sundae - Success" (run_launchpad NoPool)
+    , good defaultLaunchpadConfig {splitBps = 5_000} "Whole launchpad flow - Wr and Sundae - Success" (run_launchpad NoPool)
     ]
       <> case thourough of
         False -> []
         True ->
-          [ good defaultLaunchpadConfig "Whole launchpad flow - Pool Exists" (run_launchpad PoolExists)
+          [ good defaultLaunchpadConfig "Whole launchpad flow - Wr - Pool exists" (run_launchpad PoolExists)
           , good
               defaultLaunchpadConfig {contributionEndTime = defaultLaunchpadConfig.withdrawalEndTime}
-              "Whole launchpad flow - No Pool - contribution end time = withdrawal end time"
+              "Whole launchpad flow - Wr - No Pool - contribution end time = withdrawal end time"
               (run_launchpad NoPool)
-          , good defaultLaunchpadConfig {projectMinCommitment = 80001} "Whole launchpad flow - Fail Launchpad" (run_launchpad Fails)
+          , good defaultLaunchpadConfig {projectMinCommitment = 80001} "Whole launchpad flow - Wr - Fail Launchpad" (run_launchpad Fails)
           , -- NOTE: the min supported collateral is 4 ada
-            good defaultLaunchpadConfig {collateral = 4_000_000} "Whole launchpad flow - No Pool - 4 ADA collateral" (run_launchpad NoPool)
-          , good defaultLaunchpadConfig {collateral = 4_000_000} "Whole launchpad flow - Pool Exists - 4 ADA collateral" (run_launchpad PoolExists)
+            good defaultLaunchpadConfig {collateral = 4_000_000} "Whole launchpad flow - Wr - No Pool - 4 ADA collateral" (run_launchpad NoPool)
+          , good defaultLaunchpadConfig {collateral = 4_000_000} "Whole launchpad flow - Wr - Pool Exists - 4 ADA collateral" (run_launchpad PoolExists)
           ]
 
 cancel_launchpad :: (MaliciousLaunchpadAction, MaliciousLaunchpadAction) -> LaunchpadConfig -> Run ()
@@ -186,14 +186,13 @@ run_launchpad_pool_exists config Wallets {..} sortedPkhs admin foldAppConfig = d
   run_launchpad_rewards_fold_phase config foldAppConfig admin
 
   when (config.splitBps < 10_000) do
-    -- TOOO: maybe have a failing test
     fail "With Sundae it's always possible to create a pool"
 
   when (config.splitBps > 0) do
     createPoolUtxo PP.None Wr config poolInitWallet
     createPoolProof PP.None Wr config userWallet1
 
-  spendHolderPoolExists PTHF.None config admin launchpadOwner
+  spendHolderFundsToDao PTHF.None config Wr admin launchpadOwner
   forM_ sortedPkhs $ \pkh -> do
     spendRewardsHolder RH.None config pkh
 

@@ -136,6 +136,8 @@ data LaunchpadConfig = LaunchpadConfig
   , oilAda :: Integer
   -- ^ The min amount of ada various utxos are expected to held.
   -- This includes the rewards holder, dao fee, and final project tokens holder.
+  , sundaeFee :: Integer
+  -- ^ Not a part of contracts configuration, used for tests only
   }
   deriving (Show, Eq, Ord)
 
@@ -306,6 +308,7 @@ defaultLaunchpadConfig =
     , nodeAda = nodeAdaAmount
     , commitFoldFeeAda = commitFoldFeeAdaAmount
     , oilAda = oilAdaAmount
+    , sundaeFee = 0
     }
 
 agentFeeAdaWr :: Num a => a
@@ -355,8 +358,8 @@ wrDatum projectToken raisingToken =
   where
     (AssetClass (assetASymbol, assetAToken), AssetClass (assetBSymbol, assetBToken)) = if projectToken < raisingToken then (projectToken, raisingToken) else (raisingToken, projectToken)
 
-sundaeDatum :: BuiltinByteString -> AssetClass -> AssetClass -> Integer -> SundaePoolDatum
-sundaeDatum identifier projectToken raisingToken circulatingLp =
+sundaeDatum :: BuiltinByteString -> AssetClass -> AssetClass -> Integer -> Integer -> SundaePoolDatum
+sundaeDatum identifier projectToken raisingToken circulatingLp protocolFees =
   SundaePoolDatum
     { identifier
     , assets
@@ -365,7 +368,7 @@ sundaeDatum identifier projectToken raisingToken circulatingLp =
     , askFeesPer10Thousand = 35
     , feeManager = Nothing
     , marketOpen = 1
-    , protocolFees = 0
+    , protocolFees
     }
   where
     (AssetClass (assetASymbol, assetAToken), AssetClass (assetBSymbol, assetBToken)) =
