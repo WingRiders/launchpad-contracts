@@ -58,8 +58,8 @@ data RewardsFoldConfig = RewardsFoldConfig
     -- if 0 < splitBps < 10_000, splitBps determines what goes to Wr, the rest goes to Sundae
     -- NOTE: we don't ensure it's in the [0, 10_000] in the contracts, it's left to off-chain config creation
     splitBps :: Integer
-  , daoFeeUnits :: Integer
-  , daoFeeBase :: Integer
+  , daoFeeNumerator :: Integer
+  , daoFeeDenominator :: Integer
   , daoFeeReceiver :: Address
   , raisedTokensPoolPartPercentage :: Integer
   , collateral :: Integer
@@ -92,8 +92,8 @@ data PRewardsFoldConfig (s :: S)
               , "oilAda" ':= PInteger
               , "commitFoldFeeAda" ':= PInteger
               , "splitBps" ':= PInteger
-              , "daoFeeUnits" ':= PInteger
-              , "daoFeeBase" ':= PInteger
+              , "daoFeeNumerator" ':= PInteger
+              , "daoFeeDenominator" ':= PInteger
               , "daoFeeReceiver" ':= PAddress
               , "raisedTokensPoolPartPercentage" ':= PInteger
               , "collateral" ':= PInteger
@@ -494,8 +494,8 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
           , "commitFoldFeeAda"
           , "splitBps"
           , "owner"
-          , "daoFeeUnits"
-          , "daoFeeBase"
+          , "daoFeeNumerator"
+          , "daoFeeDenominator"
           , "daoFeeReceiver"
           , "raisedTokensPoolPartPercentage"
           , "collateral"
@@ -617,7 +617,7 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
                 projectTokensHolderCs
                 inputHolderCommittedTokens
                 inputHolderProjectTokens
-                (cfgF.daoFeeReceiver, cfgF.daoFeeUnits, cfgF.daoFeeBase)
+                (cfgF.daoFeeReceiver, cfgF.daoFeeNumerator, cfgF.daoFeeDenominator)
                 (cfgF.raisedTokensPoolPartPercentage, cfgF.collateral)
                 cfgF.oilAda
                 cfgF.owner
@@ -694,7 +694,7 @@ pcheckLastRewardsFold
   projectTokensHolderCs
   inputHolderCommittedTokens
   inputHolderProjectTokens
-  (daoFeeReceiver, daoFeeUnits, daoFeeBase)
+  (daoFeeReceiver, daoFeeNumerator, daoFeeDenominator)
   (raisedTokensPoolPartPercentage, returnedCollateral)
   oilAda
   launchOwner = unTermCont do
@@ -708,7 +708,7 @@ pcheckLastRewardsFold
 
     -- NOTE: this includes oil if ada
     totalCommittedOut <- pletC $ inputHolderCommittedTokens + resultAcc.committedPerTx - collateralCommittedOut
-    daoCommittedOut <- pletC $ pdiv # (daoFeeUnits * totalCommittedOut) # daoFeeBase
+    daoCommittedOut <- pletC $ pdiv # (daoFeeNumerator * totalCommittedOut) # daoFeeDenominator
     restCommittedOut <- pletC $ totalCommittedOut - daoCommittedOut
     tokensHoldersCommittedOut <- pletC $ pdiv # (restCommittedOut * raisedTokensPoolPartPercentage) # 100
     launchOwnerCommittedOut <- pletC $ restCommittedOut - tokensHoldersCommittedOut

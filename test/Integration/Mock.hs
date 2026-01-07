@@ -66,8 +66,8 @@ data LaunchpadConfig = LaunchpadConfig
   -- ^ The number of the project tokens to distribute among the launchpad users.
   , raisedTokensPoolPartPercentage :: Integer
   -- ^ The percentage of the raised tokens to place into the pool.
-  , daoFeeUnits :: Integer
-  , daoFeeBase :: Integer
+  , daoFeeNumerator :: Integer
+  , daoFeeDenominator :: Integer
   , daoFeeReceiver :: Address
   , daoAdmin :: PubKeyHash
   , collateral :: Integer
@@ -236,8 +236,8 @@ defaultLaunchpadConfig =
     , totalTokens = 1_000_000
     , tokensToDistribute = 700_000
     , raisedTokensPoolPartPercentage = 50
-    , daoFeeUnits = 5
-    , daoFeeBase = 100
+    , daoFeeNumerator = 5
+    , daoFeeDenominator = 100
     , daoFeeReceiver = Address (PubKeyCredential mockDaoFeeReceiverPkh) Nothing
     , collateral = 100_000_000
     , daoAdmin = mockDaoAdminPkh

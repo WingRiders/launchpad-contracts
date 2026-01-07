@@ -553,7 +553,7 @@ rewardsFoldOverTx
           collectedCommitted
             + Value.assetClassValueOf (txOutValue firstTokensHolderOut) config.raisingToken
             - collateralCommittedOut
-        daoCommittedOut = (config.daoFeeUnits * totalCommittedOut) `div` config.daoFeeBase
+        daoCommittedOut = (config.daoFeeNumerator * totalCommittedOut) `div` config.daoFeeDenominator
         restCommittedOut = totalCommittedOut - daoCommittedOut
         tokensHoldersCommittedOut = (restCommittedOut * config.raisedTokensPoolPartPercentage) `div` 100
         launchOwnerCommittedOut = restCommittedOut - tokensHoldersCommittedOut
