@@ -1,0 +1,194 @@
+cabal-version: 3.0
+name:          wingriders-plutarch
+description:   WingRiders DEX - Plutarch contracts
+version:       0.1
+build-type:    Simple
+author:        WingRiders
+maintainer:    WingRiders
+tested-with:   GHC ==9.2.3
+
+common lang
+  default-language:   Haskell2010
+  ghc-options:
+    -Wall -Wcompat -Wincomplete-record-updates
+    -Wincomplete-uni-patterns -Wredundant-constraints -Werror
+    -Wpartial-fields -fobject-code -fno-ignore-interface-pragmas
+    -fno-omit-interface-pragmas
+  build-depends:
+    , base
+    , bytestring
+    , liqwid-plutarch-extra
+    , plutarch
+    , text
+  default-extensions:
+    BangPatterns
+    DataKinds
+    DeriveAnyClass
+    DeriveGeneric
+    DerivingStrategies
+    DerivingVia
+    DuplicateRecordFields
+    ExistentialQuantification
+    FlexibleContexts
+    FlexibleInstances
+    GeneralizedNewtypeDeriving
+    ImportQualifiedPost
+    LambdaCase
+    MultiParamTypeClasses
+    NamedFieldPuns
+    NumericUnderscores
+    OverloadedRecordDot
+    OverloadedStrings
+    RankNTypes
+    RecordWildCards
+    ScopedTypeVariables
+    StandaloneDeriving
+    TemplateHaskell
+    TypeApplications
+    TypeFamilies
+    TypeOperators
+    UndecidableInstances
+
+library
+  import:          lang
+  ghc-options:
+    -fobject-code -fno-ignore-interface-pragmas
+    -fno-omit-interface-pragmas -fno-spec-constr -fno-specialise
+  hs-source-dirs:  src
+  exposed-modules:
+    Launchpad.CommitFold
+    Launchpad.Constants
+    Launchpad.FailProof
+    Launchpad.Mint.CommitFold
+    Launchpad.Mint.FailProof
+    Launchpad.Mint.Node
+    Launchpad.Mint.PoolProof
+    Launchpad.Mint.ProjectTokensHolder
+    Launchpad.Mint.RewardsFold
+    Launchpad.Node
+    Launchpad.PoolProof
+    Launchpad.PoolTypes
+    Launchpad.ProjectTokensHolderFinal
+    Launchpad.ProjectTokensHolderFirst
+    Launchpad.RewardsFold
+    Launchpad.RewardsHolder
+    Launchpad.Types
+    Launchpad.Util
+    Other.FixedSupplyPolicy
+    Other.FreePolicy
+    Other.Mint.AlwaysFails
+    Other.Mint.FreeNft
+    Other.RefScriptCarrier
+    Other.Vesting
+    Plutarch.Mint.Util
+    Plutarch.PlutusScript
+    Plutarch.Types.Base
+    Plutarch.Types.Classes
+    Plutarch.Util
+    Plutus.Util
+
+  build-depends:
+    , aeson
+    , aeson-pretty
+    , base16-bytestring
+    , data-default
+    , memory
+    , plutarch-context-builder
+    , plutus-ledger-api
+    , plutus-tx
+    , plutus-core
+    , serialise
+
+executable export
+  import:         lang
+  main-is:        Export.hs
+  hs-source-dirs: scripts
+  ghc-options:    -main-is Export
+  other-modules:
+    ExportUtils
+
+  build-depends:
+    , aeson
+    , aeson-pretty
+    , base16-bytestring
+    , cardano-simple
+    , directory
+    , filepath
+    , plutus-core
+    , plutus-ledger-api
+    , plutus-tx
+    , ply-core
+    , ply-plutarch
+    , serialise
+    , split
+    , transformers
+    , wingriders-plutarch
+
+test-suite wingriders-plutarch-test
+  import:         lang
+  type:           exitcode-stdio-1.0
+  main-is:        TestMain.hs
+  hs-source-dirs: test
+  other-modules:
+    Integration.Compile
+    Integration.Launchpad.CommitFold
+    Integration.Launchpad.CommitFoldTest
+    Integration.Launchpad.FailProof
+    Integration.Launchpad.FailProofTest
+    Integration.Launchpad.Launchpad
+    Integration.Launchpad.LaunchpadTest
+    Integration.Launchpad.Node
+    Integration.Launchpad.NodeTest
+    Integration.Launchpad.Options
+    Integration.Launchpad.PoolProof
+    Integration.Launchpad.PoolProofTest
+    Integration.Launchpad.ProjectTokensHolderFinal
+    Integration.Launchpad.ProjectTokensHolderFinalTest
+    Integration.Launchpad.ProjectTokensHolderFirst
+    Integration.Launchpad.RewardsFold
+    Integration.Launchpad.RewardsFoldTest
+    Integration.Launchpad.RewardsHolder
+    Integration.Launchpad.RewardsHolderTest
+    Integration.Launchpad.Validators
+    Integration.Mock
+    Integration.Tests
+    Integration.Util
+    Integration.Vesting
+    Plutarch.Test
+    Test.Util
+    Unit.Launchpad.CommitFold
+    Unit.Launchpad.Node
+    Unit.Launchpad.PoolProof
+    Unit.Launchpad.RewardsFold
+    Unit.Launchpad.Tests
+    Unit.Launchpad.UtilFunctions
+    Unit.Tests
+
+  ghc-options:
+    -main-is TestMain -Wwarn=missing-home-modules -threaded
+    -with-rtsopts=-N
+
+  build-depends:
+    , aeson
+    , base
+    , base16-bytestring         ^>=1.0.2.0
+    , cardano-ledger-babbage
+    , cardano-ledger-core
+    , cardano-simple
+    , cborg                     ^>=0.2.7.0
+    , containers
+    , data-default
+    , hedgehog
+    , lens
+    , mtl
+    , plutarch-context-builder
+    , plutus-core
+    , plutus-ledger-api
+    , plutus-simple-model
+    , plutus-tx
+    , prettyprinter
+    , serialise
+    , tasty
+    , tasty-hedgehog
+    , tasty-hunit
+    , wingriders-plutarch

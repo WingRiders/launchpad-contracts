@@ -1,0 +1,108 @@
+on:
+  push:
+    paths:
+      - '**.hs'
+      - '**.nix'
+      - '**.yaml'
+      - './wingriders-plutarch.cabal'
+    branches:
+      - master
+  pull_request:
+    paths:
+      - '**.hs'
+      - '**.nix'
+      - '**.yaml'
+      - './wingriders-plutarch.cabal'
+
+env:
+  CACHE_VERSION: "v2"
+  FOURMOLU_VERSION: '0.10.1.0'
+
+jobs:
+  check-formatting:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Install fourmolu
+        run: |
+          curl -sSL \
+            "https://github.com/fourmolu/fourmolu/releases/download/v${FOURMOLU_VERSION}/fourmolu-${FOURMOLU_VERSION}-linux-x86_64" \
+            -o /usr/local/bin/fourmolu
+          chmod +x /usr/local/bin/fourmolu
+      - name: Run format check
+        run: make format_check
+
+  build:
+    runs-on: ubuntu-latest
+    needs: check-formatting
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up nix and IOHK cache
+        uses: cachix/install-nix-action@v20
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= wingriders.cachix.org-1:cVnz53gCa8copPXqMJ/2f1kOG/IIYsOi/EfXjkyuLUk= 
+            substituters = https://cache.iog.io https://cache.nixos.org/ https://wingriders.cachix.org
+
+      - name: Cachix
+        uses: cachix/cachix-action@v12
+        with:
+          name: wingriders
+          authToken: '${{ secrets.CACHIXKEY }}'
+
+      - name: Set up dist-newstyle cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ./dist-newstyle
+          key: wingriders-plutarch-dist-${{ env.CACHE_VERSION }}
+
+      - name: VM cleanup to reduce image size
+        run: |
+          sudo rm -rfv /usr/share/dotnet
+          sudo rm -rfv /opt/ghc
+          sudo rm -rfv /usr/local/share/boost
+          sudo rm -rfv "$AGENT_TOOLSDIRECTORY"     
+
+      - name: Build wingriders-plutarch
+        run: make nix-build
+
+  test:
+    runs-on: ubuntu-latest
+    needs: check-formatting
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up nix and IOHK cache
+        uses: cachix/install-nix-action@v20
+        with:
+          nix_path: nixpkgs=channel:nixos-unstable
+          extra_nix_config: |
+            trusted-public-keys = hydra.iohk.io:f/Ea+s+dFdN+3Y/G+FDgSq+a5NEWhJGzdjvKNGv0/EQ= cache.nixos.org-1:6NCHdD59X431o0gWypbMrAURkbJ16ZPMQFGspcDShjY= wingriders.cachix.org-1:cVnz53gCa8copPXqMJ/2f1kOG/IIYsOi/EfXjkyuLUk= 
+            substituters = https://cache.iog.io https://cache.nixos.org/ https://wingriders.cachix.org
+
+      - name: Cachix
+        uses: cachix/cachix-action@v12
+        with:
+          name: wingriders
+          authToken: '${{ secrets.CACHIXKEY }}'
+
+      - name: Set up dist-newstyle cache
+        uses: actions/cache@v3
+        with:
+          path: |
+            ./dist-newstyle
+          key: wingriders-plutarch-dist-${{ env.CACHE_VERSION }}
+
+      - name: VM cleanup to reduce image size
+        run: |
+          sudo rm -rfv /usr/share/dotnet
+          sudo rm -rfv /opt/ghc
+          sudo rm -rfv /usr/local/share/boost
+          sudo rm -rfv "$AGENT_TOOLSDIRECTORY"  
+
+      - name: Test wingriders-plutarch
+        run: make nix-test

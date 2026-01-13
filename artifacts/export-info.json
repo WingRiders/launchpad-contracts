@@ -1,0 +1,108 @@
+{
+  "launchpadConstants": {
+    "emergencyWithdrawalPeriod": 2592000000,
+    "maxNodeIndex": 255,
+    "minNodeIndex": 0,
+    "nodesInactivityPeriod": 300000,
+    "separatorNodeKeyLength": 1
+  },
+  "policies": [
+    {
+      "name": "commit-fold-policy",
+      "size": 2278,
+      "symbol": "90c625cbd8bfb8d6ca16f2e47f8d7bb2129d86e4b3bdbd46c7b9e22d"
+    },
+    {
+      "name": "node-policy",
+      "size": 1451,
+      "symbol": "83e60dd91e8cbf5921ed632850de564f82f9cfc06bc44ec3323a7bfd"
+    },
+    {
+      "name": "pool-proof-policy",
+      "size": 2682,
+      "symbol": "df262a3241dc766c9b95630ab867650beb9fb0188eb1e1d9fad4b6b4"
+    },
+    {
+      "name": "project-tokens-holder-policy",
+      "size": 941,
+      "symbol": "ca53a51e2f1f38c1cb8850831274860b944153b6ffb1b4cccfaf158f"
+    },
+    {
+      "name": "rewards-fold-policy",
+      "size": 1926,
+      "symbol": "cc6bd15f0b0e905c32055154e6ff2b468b24ebaa9cebe263734c8bb7"
+    },
+    {
+      "name": "fail-proof-policy",
+      "size": 1093,
+      "symbol": "909516674e078ddf8f213494e1bc46a27bba7ac70be43b523d05c14f"
+    },
+    {
+      "name": "always-fails-token",
+      "size": 6,
+      "symbol": "03d9bf874aa50cb845f4dcf011a223ed4b1ccd51b485990baa79d676"
+    },
+    {
+      "name": "free-nft-policy",
+      "size": 343,
+      "symbol": "7a85b4a6bcf180063740b93d1b9c02db9741ea991159ba694bb54879"
+    },
+    {
+      "name": "fixed-supply-unapplied-policy",
+      "size": 136,
+      "symbol": "3501a32d7191af9bc85349d54b4216136e4a41ca35c7820a2617df3b"
+    }
+  ],
+  "validators": [
+    {
+      "hash": "2dd8898160fe20586f76d0e0b10bfc1a938e83d27b47acd642a9f1c0",
+      "name": "commit-fold",
+      "size": 5351
+    },
+    {
+      "hash": "daa7e68abf5a31108e73ff750e51feba548261627a0ff91f714cf1ea",
+      "name": "node",
+      "size": 9871
+    },
+    {
+      "hash": "ab2b77feb5b9c1b91f964b528cf0ade8007e2ad0fd0a7e3fce6d9014",
+      "name": "pool-proof",
+      "size": 7
+    },
+    {
+      "hash": "5aa27397ae0e822a1d1c1bf25c3de3cf5429c5c3ce11b7c086c8d75e",
+      "name": "project-tokens-holder-final",
+      "size": 5718
+    },
+    {
+      "hash": "67d322de99a3815c99e7eb74bfbacab081ed7f9720bdf9447f0ccb79",
+      "name": "project-tokens-holder-first",
+      "size": 1440
+    },
+    {
+      "hash": "70a86b960b8958d35fa9464de33160311c7d34c9346c4edc9a580322",
+      "name": "rewards-fold",
+      "size": 7670
+    },
+    {
+      "hash": "a8139c09649fc6644330eedd317d23ef4245df15620369410eaa50fd",
+      "name": "rewards-holder",
+      "size": 1072
+    },
+    {
+      "hash": "51936f3c98a04b6609aa9b5c832ba1182cf43a58e534fcc05db09d69",
+      "name": "fail-proof",
+      "size": 7
+    },
+    {
+      "hash": "f94ee84307326935a04599988b803a1b20a98c80ea929b9079ec558f",
+      "name": "ref-script-carrier",
+      "size": 339
+    },
+    {
+      "hash": "aff3a83f6e89ece6c22e88d970d7bdd8fd603dd5dc53ff2871599e9a",
+      "name": "vesting",
+      "size": 1091
+    }
+  ]
+}
