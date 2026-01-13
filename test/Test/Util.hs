@@ -47,3 +47,7 @@ vUSDT = coins Map.! "vUSDT"
 
 vDOGE :: AssetClass
 vDOGE = coins Map.! "vDOGE"
+
+-- | NOTE: doesn't work for negative numbers because of the mod
+divideCeil :: Integer -> Integer -> Integer
+divideCeil a b = div a b + if (mod a b > 0) then 1 else 0

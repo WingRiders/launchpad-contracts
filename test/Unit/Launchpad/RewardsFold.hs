@@ -2,7 +2,7 @@
 
 module Unit.Launchpad.RewardsFold (rewardsFoldTests) where
 
-import Integration.Mock (nodeAdaAmount, rewardsHolderOilAdaAmount)
+import Integration.Mock (nodeAdaAmount, oilAdaAmount)
 import Launchpad.RewardsFold
 import Launchpad.Types
 import Plutarch.Api.V1.Value (passertPositive, passertSorted)
@@ -264,7 +264,7 @@ pnextRewardsStateTests =
           (pconstant mockProjectToken)
           (pconstant mockNodeHash)
           (pconstant mockRewardsHolderHash)
-          (pconstant rewardsHolderOilAdaAmount)
+          (pconstant oilAdaAmount)
           # state
           # node
           # reward
@@ -298,7 +298,7 @@ pnextRewardsStateTests =
                   (Node (Just (unwrapPubKeyHash mockNextPkh, 0)) Nothing 12_345 2_000)
                 # pjust
                   ( outReward
-                      ( adaValue rewardsHolderOilAdaAmount
+                      ( adaValue oilAdaAmount
                           <> usdcValue 2_000
                       )
                       ( RewardsHolderDatum
@@ -327,7 +327,7 @@ pnextRewardsStateTests =
                   )
                 # pjust
                   ( outReward
-                      ( adaValue rewardsHolderOilAdaAmount
+                      ( adaValue oilAdaAmount
                           <> singleton mockProjectSymbol mockProjectToken (plift (prewardsFormula # 100_000 # 50_000 # 2000))
                       )
                       ( RewardsHolderDatum
@@ -365,7 +365,7 @@ pnextRewardsStateTests =
                   )
                 # pjust
                   ( outReward
-                      ( adaValue rewardsHolderOilAdaAmount
+                      ( adaValue oilAdaAmount
                           <> usdcValue 1_000
                           <> singleton mockProjectSymbol mockProjectToken (plift (prewardsFormula # 100_000 # 50_000 # (2_000 - 1_000)))
                       )
@@ -426,7 +426,7 @@ pnextRewardsStateTests =
                     )
                   # pjust
                     ( outReward
-                        ( adaValue rewardsHolderOilAdaAmount
+                        ( adaValue oilAdaAmount
                             <> usdcValue 1_000
                             <> singleton mockProjectSymbol mockProjectToken 1_000
                         )
@@ -452,7 +452,7 @@ pnextRewardsStateTests =
                     )
                   # pjust
                     ( outReward
-                        ( adaValue rewardsHolderOilAdaAmount
+                        ( adaValue oilAdaAmount
                             <> singleton mockProjectSymbol mockProjectToken 1
                         )
                         ( RewardsHolderDatum
@@ -477,7 +477,7 @@ pnextRewardsStateTests =
                     )
                   # pjust
                     ( outReward
-                        ( adaValue rewardsHolderOilAdaAmount
+                        ( adaValue oilAdaAmount
                             <> usdcValue 1_999
                         )
                         ( RewardsHolderDatum
@@ -503,7 +503,7 @@ pnextRewardsStateTests =
                   # pjust
                     ( outRewardWithAddress
                         (pubKeyHashAddress mockNextPkh)
-                        ( adaValue rewardsHolderOilAdaAmount
+                        ( adaValue oilAdaAmount
                             <> singleton mockProjectSymbol mockProjectToken (plift (prewardsFormula # 100_000 # 50_000 # 2_000))
                         )
                         ( RewardsHolderDatum
@@ -528,7 +528,7 @@ pnextRewardsStateTests =
                     )
                   # pjust
                     ( outReward
-                        ( adaValue rewardsHolderOilAdaAmount
+                        ( adaValue oilAdaAmount
                             <> singleton mockProjectSymbol mockProjectToken (plift (prewardsFormula # 100_000 # 50_000 # 2_000))
                         )
                         ( RewardsHolderDatum
@@ -553,7 +553,7 @@ pnextRewardsStateTests =
                     )
                   # pjust
                     ( outReward
-                        ( adaValue rewardsHolderOilAdaAmount
+                        ( adaValue oilAdaAmount
                             <> singleton mockProjectSymbol mockProjectToken (plift (prewardsFormula # 100_000 # 50_000 # 2_000))
                         )
                         ( RewardsHolderDatum
@@ -579,7 +579,7 @@ pnextRewardsStateTests =
                     )
                   # pjust
                     ( outReward
-                        ( adaValue rewardsHolderOilAdaAmount
+                        ( adaValue oilAdaAmount
                             <> singleton mockProjectSymbol mockProjectToken (plift (prewardsFormula # 100_000 # 50_000 # 2_000))
                             <> singleton mockPresaleCs mockPresaleTn 1
                         )
@@ -606,7 +606,7 @@ pnextRewardsStateTests =
                     )
                   # pjust
                     ( outReward
-                        ( adaValue rewardsHolderOilAdaAmount
+                        ( adaValue oilAdaAmount
                             <> singleton mockProjectSymbol mockProjectToken (plift (prewardsFormula # 100_000 # 50_000 # 2_000))
                         )
                         ( RewardsHolderDatum
@@ -631,7 +631,7 @@ pnextRewardsStateTests =
                     )
                   # pjust
                     ( outReward
-                        (adaValue rewardsHolderOilAdaAmount <> usdcValue 2_000)
+                        (adaValue oilAdaAmount <> usdcValue 2_000)
                         ( RewardsHolderDatum
                             (unwrapPubKeyHash mockNextPkh, 0)
                             mockProjectSymbol

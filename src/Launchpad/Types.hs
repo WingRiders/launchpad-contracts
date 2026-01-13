@@ -14,6 +14,23 @@ import Plutarch.Util ()
 import PlutusLedgerApi.V2
 import PlutusTx qualified
 
+-- Encoded as an integer
+data Dex = Wr | Sundae
+  deriving stock (Show, Eq, Ord, Generic, Enum, Bounded)
+  deriving
+    (PlutusTx.ToData, PlutusTx.FromData, PlutusTx.UnsafeFromData)
+    via (EnumIsData Dex)
+
+-- Encoded as an integer
+data PDex (s :: S) = PWr | PSundae
+  deriving stock (Generic, Enum, Bounded)
+  deriving anyclass (PlutusType, PIsData, PShow, PEq)
+
+instance DerivePlutusType PDex where
+  type DPTStrat _ = PlutusTypeEnumData
+
+instance PTryFrom PData (PAsData PDex)
+
 -- ScriptHash of the Node Validator
 type LaunchpadTokensHolderDatum = ScriptHash
 
@@ -433,8 +450,12 @@ instance ScottConvertible PRewardsFoldDatum where
 
 data RewardsFoldRedeemer
   = -- | Do a fold over the nodes and distribute the rewards.
-    -- The commit fold compensation index is ignored in all steps except the last.
-    RewardsFold [Integer] [Integer] Integer Integer Integer
+    -- The commit fold compensation index,
+    -- the dao compensation index,
+    -- and the owner compensation index
+    -- are ignored in all steps except the last.
+    --          inputs    outputs   commit  fold    holder  dao     owner
+    RewardsFold [Integer] [Integer] Integer Integer Integer Integer Integer
   | RewardsFoldEmergencyWithdrawal
   deriving (Show, Eq, Ord, Generic)
 
@@ -451,6 +472,8 @@ data PRewardsFoldRedeemer (s :: S)
                , "commitFoldCompensationIndex" ':= PInteger
                , "inputRewardsFoldIndex" ':= PInteger
                , "inputTokensHolderIndex" ':= PInteger
+               , "daoCompensationIndex" ':= PInteger
+               , "ownerCompensationIndex" ':= PInteger
                ]
           )
       )
@@ -518,11 +541,11 @@ data PoolProofDatum = PoolProofDatum
   , projectToken :: TokenName
   , raisingSymbol :: CurrencySymbol
   , raisingToken :: TokenName
+  , dex :: Dex
   }
   deriving (Show, Eq, Ord, Generic)
 
 PlutusTx.makeIsDataIndexed ''PoolProofDatum [('PoolProofDatum, 0)]
-PlutusTx.makeLift ''PoolProofDatum
 
 data PPoolProofDatum (s :: S)
   = PPoolProofDatum
@@ -533,6 +556,7 @@ data PPoolProofDatum (s :: S)
               , "projectToken" ':= PTokenName
               , "raisingSymbol" ':= PCurrencySymbol
               , "raisingToken" ':= PTokenName
+              , "dex" ':= PDex
               ]
           )
       )
@@ -551,7 +575,6 @@ deriving via
     (PConstantDecl PoolProofDatum)
 
 instance PTryFrom PData PPoolProofDatum
-instance PTryFrom PData (PAsData PPoolProofDatum)
 
 type FailProofDatum = ScriptHash
 

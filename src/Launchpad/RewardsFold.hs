@@ -3,16 +3,19 @@
 
 module Launchpad.RewardsFold where
 
+-- TOOD: document checks for oil for two outputs that comes from collateral
+
 import Data.Functor (($>))
 import Launchpad.Constants
 import Launchpad.Types
 import Plutarch
-import Plutarch.Api.V1.Value (padaSymbol, padaToken, pvalueOf)
+import Plutarch.Api.V1.Value (pvalueOf)
 import Plutarch.Api.V2
 import Plutarch.Builtin (pforgetData)
 import Plutarch.DataRepr
 import Plutarch.Extra.ScriptContext
 import Plutarch.Extra.TermCont
+import Plutarch.Extra.Value (padaOf)
 import Plutarch.Lift
 import Plutarch.Maybe
 import Plutarch.Mint.Util
@@ -34,6 +37,7 @@ import PlutusTx qualified
 -}
 data RewardsFoldConfig = RewardsFoldConfig
   { starter :: TxOutRef
+  , owner :: Address
   , nodeSymbol :: CurrencySymbol
   , rewardsFoldPolicy :: CurrencySymbol
   , rewardsHolderValidatorHash :: ScriptHash
@@ -47,8 +51,18 @@ data RewardsFoldConfig = RewardsFoldConfig
   , presaleTierCs :: CurrencySymbol
   , tokensToDistribute :: Integer
   , withdrawalEndTime :: POSIXTime
-  , rewardsHolderOilAda :: Integer
+  , oilAda :: Integer
   , commitFoldFeeAda :: Integer
+  , -- if 0, only sundae pool is created
+    -- if 10_000, only wr pool is created
+    -- if 0 < splitBps < 10_000, splitBps determines what goes to Wr, the rest goes to Sundae
+    -- NOTE: we don't ensure it's in the [0, 10_000] in the contracts, it's left to off-chain config creation
+    splitBps :: Integer
+  , daoFeeNumerator :: Integer
+  , daoFeeDenominator :: Integer
+  , daoFeeReceiver :: Address
+  , raisedTokensPoolPartPercentage :: Integer
+  , collateral :: Integer
   }
   deriving (Show, Eq, Ord, Generic)
 
@@ -61,6 +75,7 @@ data PRewardsFoldConfig (s :: S)
           s
           ( PDataRecord
               [ "starter" ':= PTxOutRef
+              , "owner" ':= PAddress
               , "nodeSymbol" ':= PCurrencySymbol
               , "rewardsFoldPolicy" ':= PCurrencySymbol
               , "rewardsHolderValidatorHash" ':= PScriptHash
@@ -74,8 +89,14 @@ data PRewardsFoldConfig (s :: S)
               , "presaleTierCs" ':= PCurrencySymbol
               , "tokensToDistribute" ':= PInteger
               , "withdrawalEndTime" ':= PPOSIXTime
-              , "rewardsHolderOilAda" ':= PInteger
+              , "oilAda" ':= PInteger
               , "commitFoldFeeAda" ':= PInteger
+              , "splitBps" ':= PInteger
+              , "daoFeeNumerator" ':= PInteger
+              , "daoFeeDenominator" ':= PInteger
+              , "daoFeeReceiver" ':= PAddress
+              , "raisedTokensPoolPartPercentage" ':= PInteger
+              , "collateral" ':= PInteger
               ]
           )
       )
@@ -97,7 +118,7 @@ rewardsFoldValidator :: Term s (PRewardsFoldConfig :--> PValidator)
 rewardsFoldValidator = plam \cfg datum redeemer context ->
   let datum' = ptryFrom @PRewardsFoldDatum datum fst
       redeemer' = ptryFrom @PRewardsFoldRedeemer redeemer fst
-   in popaque (perrorIfFalse #$ ptraceIfFalse "L0" $ pvalidateRewardsFold cfg datum' redeemer' context)
+   in popaque (perrorIfFalse #$ pvalidateRewardsFold cfg datum' redeemer' context)
 
 data PCalculatedRewards (s :: S) = PCalculatedRewards
   { projectTokens :: Term s PInteger
@@ -157,12 +178,12 @@ pcheckedRewards ::
         :--> PMaybe PTxOut
         :--> PCalculatedRewards
     )
-pcheckedRewards = phoistAcyclic $ plam \rewardsOf presaleSymbol committedSymbol committedToken projectSymbol projectToken rewardsHolderHash rewardsHolderOilAda node nodeValue nodeAddress state reward ->
+pcheckedRewards = phoistAcyclic $ plam \rewardsOf presaleSymbol committedSymbol committedToken projectSymbol projectToken rewardsHolderHash oilAda node nodeValue nodeAddress state reward ->
   unTermCont do
     rewardF <- pletFieldsC @'["value", "datum", "address"] (pfromJust # reward)
     rewardValue <- pletC rewardF.value
     rewardDatum <-
-      pletFieldsC @'["owner", "projectSymbol", "projectToken", "raisingSymbol", "raisingToken"]
+      pletFieldsC @'["owner", "projectSymbol", "projectToken", "raisingSymbol", "raisingToken", "createdAt"]
         (pfromPDatum @PRewardsHolderDatum # (ptryFromInlineDatum # rewardF.datum))
     nodeF <- pletFieldsC @'["next", "key", "committed", "createdTime"] node
     expectedRewards <- pletC (rewardsOf # state # node)
@@ -180,7 +201,7 @@ pcheckedRewards = phoistAcyclic $ plam \rewardsOf presaleSymbol committedSymbol 
             presaleSymbol
             nodeValue
             rewardValue
-            rewardsHolderOilAda
+            oilAda
             projectSymbol
             projectToken
             committedSymbol
@@ -206,7 +227,7 @@ pisRewardsValueCorrect
   presaleCs
   nodeValue
   rewardValue
-  rewardsHolderOilAda
+  oilAda
   projectSymbol
   projectToken
   committedSymbol
@@ -218,11 +239,11 @@ pisRewardsValueCorrect
         ptraceIfFalse "L9" $ pcountOfUniqueTokensWithOverlap committedSymbol rewardValue #<= 4
       , ptraceIfFalse "L10" $ pvalueOf # rewardValue # projectSymbol # projectToken #>= expectedProjectTokens
       , ptraceIfFalse "L11" $ plet (pvalueOf # rewardValue # committedSymbol # committedToken) \committed ->
-          let adaValue = pvalueOf # rewardValue # padaSymbol # padaToken
+          let adaValue = padaOf # rewardValue
            in pif
                 (pisAda # committedSymbol)
-                (committed #>= (expectedCommittedTokens + rewardsHolderOilAda))
-                (committed #>= expectedCommittedTokens #&& adaValue #>= rewardsHolderOilAda)
+                (committed #>= (expectedCommittedTokens + oilAda))
+                (pand'List [committed #>= expectedCommittedTokens, adaValue #>= oilAda])
       , ptraceIfFalse "L12" $ plookupCurrency rewardValue presaleCs #== plookupCurrency nodeValue presaleCs
       ]
 
@@ -306,10 +327,10 @@ pnextRewardsState = phoistAcyclic $ plam \checkedRewardsOf withNext nextOf nodeH
           (unTermCont (pguardC "separator nodes don't get rewards" (pisNothing # reward) $> pcon (PCalculatedRewards 0 0 0)))
           (checkedRewardsOf # nodeDatum # nodeF.value # nodeF.address # accF.foldState # reward)
       )
-  pguardC "L15" $
+  pguardC "L13" $
     pand'List
-      [ ptraceIfFalse "L16" $ nextOf # accF.foldState #== pfromData nodeD.key
-      , ptraceIfFalse "L17" $ pisEqualScriptHashAddress # nodeHash # nodeF.address
+      [ ptraceIfFalse "L14" $ nextOf # accF.foldState #== pfromData nodeD.key
+      , ptraceIfFalse "L15" $ pisEqualScriptHashAddress # nodeHash # nodeF.address
       ]
   pure
     ( pcon
@@ -347,7 +368,7 @@ pnextRewardsStateFirstCome
   projectToken
   nodeHash
   rewardsHolderHash
-  rewardsHolderOilAda =
+  oilAda =
     plet (plam (\state newNext -> pmatch state \s -> pcon @PRewardsFoldScott s {next = newNext})) \withNext ->
       pnextRewardsState
         # plam
@@ -363,7 +384,7 @@ pnextRewardsStateFirstCome
                 # projectSymbol
                 # projectToken
                 # rewardsHolderHash
-                # rewardsHolderOilAda
+                # oilAda
                 # nodeD
                 # nodeV
                 # nodeA
@@ -385,11 +406,11 @@ pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
   selfValidatorHash <- pletC (pgetValidatorHashFromScriptAddress #$ ptxOutAddress # selfOut)
   pure $
     pand'List
-      [ ptraceIfFalse "L18" $ pcountAllScriptInputs # txInfoF.inputs #== 1
-      , ptraceIfFalse "L19" $ pvalueOf # txInfoF.mint # cfgF.rewardsFoldPolicy # pscriptHashToTokenName selfValidatorHash #== -1
-      , ptraceIfFalse "L20" $ plength # ((pto . pto) (pfromData txInfoF.mint)) #== 2
-      , ptraceIfFalse "L21" $ pto (lowerTime - cfgF.withdrawalEndTime) #> pconstant emergencyWithdrawalPeriod
-      , ptraceIfFalse "L22" $ ptxSignedBy # txInfoF.signatories # (paddressPubKeyCredential # commitFoldOwner)
+      [ ptraceIfFalse "L16" $ pcountAllScriptInputs # txInfoF.inputs #== 1
+      , ptraceIfFalse "L17" $ pvalueOf # txInfoF.mint # cfgF.rewardsFoldPolicy # pscriptHashToTokenName selfValidatorHash #== -1
+      , ptraceIfFalse "L18" $ plength # ((pto . pto) (pfromData txInfoF.mint)) #== 2
+      , ptraceIfFalse "L19" $ pto (lowerTime - cfgF.withdrawalEndTime) #> pconstant emergencyWithdrawalPeriod
+      , ptraceIfFalse "L20" $ ptxSignedBy # txInfoF.signatories # (paddressPubKeyCredential # commitFoldOwner)
       ]
 
 {- | The rewards fold validator.
@@ -412,12 +433,15 @@ pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
   - each reward output has the corresponding owner's node key stored in its datum and stores the token asset classes used in the project
   - a new project tokens holder T' output utxo is created
   - the staking credential of T' is the same as of the T
-  - the value of T' is the value of T minus the distributed project tokens plus the collected committed tokens
   - if the last processed node has a next key equal to nothing
     - the ADA value of R 0,i plus 2 ADA per processed node must be sent the commitFoldOwner address
     - the rewards fold token must be burned
-    - the address of T' must be the final version (ProjectTokensHolderFinal)
-    - the datum of T' must be equal to unit
+    - the project tokens holder token must be burned
+    - the script address of T' must be equal to the project tokens holder final validator
+    - there is a T' for each used dex, the dex is stored in the datum
+    - a dao fee (configured percentage) in raised tokens is sent to the DAO wallet
+    - the launch owner is compensated (configured percentage) with the raised tokens
+    - the rest of the tokens are split (configured percentage) between the used dexes
   - for every input node, there is a corresponding user reward utxo when node.committed /= 0
     - if the node.createdTime > just value of the cutoffTime
       OR the node.createdTime == cutoffTime but the node.key > cutoffKey
@@ -434,6 +458,7 @@ pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
       and the tier token if it was contained in the node
     - the staking credential of the reward output must be the same as of the corresponding node
   - if the last processed node.next is a just value
+    - the value of T' is the value of T minus the distributed project tokens plus the collected committed tokens
     - there is a R 0,t rewards fold utxo in the outputs with the rewards fold token
     - if there haven't been any raisingTokens collected yet expect 3 unique tokens else expect 4
     - the value of R 0,t is equal to the value of R 0,i plus 2 ADA per each processed node
@@ -465,8 +490,15 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
           , "raisingToken"
           , "presaleTierCs"
           , "tokensToDistribute"
-          , "rewardsHolderOilAda"
+          , "oilAda"
           , "commitFoldFeeAda"
+          , "splitBps"
+          , "owner"
+          , "daoFeeNumerator"
+          , "daoFeeDenominator"
+          , "daoFeeReceiver"
+          , "raisedTokensPoolPartPercentage"
+          , "collateral"
           ]
         cfg
 
@@ -477,6 +509,8 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
           , "commitFoldCompensationIndex"
           , "inputTokensHolderIndex"
           , "inputRewardsFoldIndex"
+          , "daoCompensationIndex"
+          , "ownerCompensationIndex"
           ]
         redeemer
     inputNodes <- pletC redeemerF.inputNodes
@@ -494,6 +528,8 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
     projectTokensHolderFinalValidatorHash <- pletC cfgF.finalProjectTokensHolderValidatorHash
     projectTokensHolderFirstValidatorHash <- pletC cfgF.firstProjectTokensHolderValidatorHash
     projectTokensHolderCs <- pletC cfgF.projectTokensHolderPolicy
+
+    splitBps <- pletC cfgF.splitBps
 
     PPair projectTokensHolderInInfo selfInInfo <-
       pmatchC (p2elemsAt # pfromData redeemerF.inputTokensHolderIndex # pfromData redeemerF.inputRewardsFoldIndex # inputs)
@@ -516,7 +552,7 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
             # projectTokensHolderInputV
             # pcommittedSymbol
             # pcommittedToken
-        inputHolderAda = pvalueOf # projectTokensHolderInputV # padaSymbol # padaToken
+        inputHolderAda = padaOf # projectTokensHolderInputV
 
     self <- pletC . toScott $ datum
     selfF <- pmatchC self
@@ -538,31 +574,34 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
                 pprojectToken
                 selfF.nodeScriptHash
                 cfgF.rewardsHolderValidatorHash
-                cfgF.rewardsHolderOilAda
+                cfgF.oilAda
             )
         )
     expectedStateF <- pmatchC resultAcc.foldState
 
-    let selfAda = pvalueOf # selfTxOut.value # padaSymbol # padaToken
+    let selfAda = padaOf # selfTxOut.value
     -- Either the expected fold output ada value or the commit fold compensation
     expectedOutAda <- pletC (selfAda + cfgF.commitFoldFeeAda * resultAcc.nodeCount)
 
     pure $
       pand'List
         [ -- All nodes are processed + the rewards fold input + the project tokens holder input
-          ptraceIfFalse "L23" $ pcountAllScriptInputs # inputs #== resultAcc.nodeCount + 2
-        , ptraceIfFalse "L24" $ pvalueOf # tx.mint # cfgF.nodeSymbol # pscriptHashToTokenName selfF.nodeScriptHash #== ((-1) * resultAcc.nodeCount)
-        , ptraceIfFalse "L25" $ resultAcc.nodeCount #> 0
-        , ptraceIfFalse "L26" $ selfInInfoF.outRef #== pownRef contextF.purpose
-        , ptraceIfFalse "L27" $ pvalueOf # selfTxOut.value # selfCs # pscriptHashToTokenName selfValidatorHash #== 1
-        , ptraceIfFalse "L28" $ pisEqualScriptHashAddress # projectTokensHolderFirstValidatorHash # projectTokensHolderInput.address
+          ptraceIfFalse "L21" $ pcountAllScriptInputs # inputs #== resultAcc.nodeCount + 2
+        , ptraceIfFalse "L22" $ pvalueOf # tx.mint # cfgF.nodeSymbol # pscriptHashToTokenName selfF.nodeScriptHash #== ((-1) * resultAcc.nodeCount)
+        , ptraceIfFalse "L23" $ resultAcc.nodeCount #> 0
+        , ptraceIfFalse "L24" $ selfInInfoF.outRef #== pownRef contextF.purpose
+        , ptraceIfFalse "L25" $ pvalueOf # selfTxOut.value # selfCs # pscriptHashToTokenName selfValidatorHash #== 1
+        , ptraceIfFalse "L26" $ pisEqualScriptHashAddress # projectTokensHolderFirstValidatorHash # projectTokensHolderInput.address
         , pif
             (pisDNothing # expectedStateF.next)
             ( pcheckLastRewardsFold
+                splitBps
                 selfValidatorHash
                 selfCs
                 redeemerF.outputNodes
                 (pfromData redeemerF.commitFoldCompensationIndex)
+                (pfromData redeemerF.daoCompensationIndex)
+                (pfromData redeemerF.ownerCompensationIndex)
                 pcommittedSymbol
                 pcommittedToken
                 pprojectSymbol
@@ -576,9 +615,12 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
                 projectTokensHolderFinalValidatorHash
                 projectTokensHolderFirstValidatorHash
                 projectTokensHolderCs
-                inputHolderAda
                 inputHolderCommittedTokens
                 inputHolderProjectTokens
+                (cfgF.daoFeeReceiver, cfgF.daoFeeNumerator, cfgF.daoFeeDenominator)
+                (cfgF.raisedTokensPoolPartPercentage, cfgF.collateral)
+                cfgF.oilAda
+                cfgF.owner
             )
             ( pcheckMiddleRewardsFold
                 selfValidatorHash
@@ -602,9 +644,12 @@ pvalidateRewardsFold cfg datum redeemer' context = pmatch redeemer' \case
         ]
 
 pcheckLastRewardsFold ::
+  Term s PInteger ->
   Term s PScriptHash ->
   Term s PCurrencySymbol ->
   Term s (PBuiltinList (PAsData PInteger)) ->
+  Term s PInteger ->
+  Term s PInteger ->
   Term s PInteger ->
   Term s PCurrencySymbol ->
   Term s PTokenName ->
@@ -621,13 +666,19 @@ pcheckLastRewardsFold ::
   Term s PCurrencySymbol ->
   Term s PInteger ->
   Term s PInteger ->
+  (Term s PAddress, Term s PInteger, Term s PInteger) ->
+  (Term s PInteger, Term s PInteger) ->
   Term s PInteger ->
+  Term s PAddress ->
   Term s PBool
 pcheckLastRewardsFold
+  splitBps
   selfValidatorHash
   selfCs
   outputNodesIndices
   commitFoldCompensationIndex
+  daoCompensationIndex
+  ownerCompensationIndex
   pcommittedSymbol
   pcommittedToken
   pprojectSymbol
@@ -641,50 +692,176 @@ pcheckLastRewardsFold
   projectTokensHolderFinalValidatorHash
   projectTokensHolderFirstValidatorHash
   projectTokensHolderCs
-  inputHolderAda
   inputHolderCommittedTokens
-  inputHolderProjectTokens = unTermCont do
-    projectTokensHolderOutput <-
-      pletFieldsC @'["address", "datum", "value"]
-        -- Note that the token is reused from the first holder script
-        ( passertSingleSpecificInput "L29"
-            # pid
-            # projectTokensHolderFinalValidatorHash
-            # projectTokensHolderCs
-            # pscriptHashToTokenName projectTokensHolderFirstValidatorHash
+  inputHolderProjectTokens
+  (daoFeeReceiver, daoFeeNumerator, daoFeeDenominator)
+  (raisedTokensPoolPartPercentage, returnedCollateral)
+  oilAda
+  launchOwner = unTermCont do
+    -- The committed tokens from the first tokens holder are split between:
+    --   dao (fee from (total - collateral if ada))
+    --   launch owner (percentage of (total - dao - collateral if ada))
+    -- The (rest - collateral if ada) is split between:
+    --   Wr final project tokens holder if used (percentage of what's left)
+    --   Sundae final project tokens holder if used (what's left - wr tokens holder)
+    collateralCommittedOut <- pletC $ pif (pisAda # pcommittedSymbol) returnedCollateral 0
+
+    -- NOTE: this includes oil if ada
+    totalCommittedOut <- pletC $ inputHolderCommittedTokens + resultAcc.committedPerTx - collateralCommittedOut
+    daoCommittedOut <- pletC $ pdiv # (daoFeeNumerator * totalCommittedOut) # daoFeeDenominator
+    restCommittedOut <- pletC $ totalCommittedOut - daoCommittedOut
+    tokensHoldersCommittedOut <- pletC $ pdiv # (restCommittedOut * raisedTokensPoolPartPercentage) # 100
+    launchOwnerCommittedOut <- pletC $ restCommittedOut - tokensHoldersCommittedOut
+    wrHolderCommittedOut <- pletC $ pdivideCeil # (tokensHoldersCommittedOut * splitBps) # bpsScalingFactor
+    let sundaeHolderCommittedOut = tokensHoldersCommittedOut - wrHolderCommittedOut
+
+    -- The project tokens from the first tokens holder are split between:
+    --   Wr final project tokens holder if used (percentage of total)
+    --   Sundae final project tokens holder if used (the rest)
+    totalProjectOut <- pletC $ inputHolderProjectTokens - resultAcc.distributedPerTx
+    wrHolderProjectOut <- pletC $ pdivideCeil # (totalProjectOut * splitBps) # bpsScalingFactor
+    let sundaeHolderProjectOut = totalProjectOut - wrHolderProjectOut
+
+    -- Rewards fold utxo ada is transferred to the commit fold compensation
+
+    -- The ada from the first tokens holder is split between:
+    --   dao (oil)
+    --   commit fold compensation (oil)
+    --   Wr final project tokens holder if used
+    --   Sundae final project tokens holder if used
+    --   launch owner (collateral - used up oil)
+    let daoAdaFromCollateral = oilAda
+        -- an oilAda amount per used dex
+        holdersAdaFromCollateral = pcond [(splitBps #== 0, oilAda), (splitBps #== bpsScalingFactor, oilAda)] (oilAda * 2)
+        ownerAda = returnedCollateral - daoAdaFromCollateral - holdersAdaFromCollateral
+
+        -- Called with the correct holder utxo
+        isHolderOutputCorrect out' dex holderCommittedOut holderProjectOut = unTermCont do
+          out <- pletFieldsC @'["address", "datum", "value"] out'
+          outValue <- pletC out.value
+          let outCommitted =
+                pvalueOf
+                  # outValue
+                  # pcommittedSymbol
+                  # pcommittedToken
+              outProject =
+                pvalueOf
+                  # outValue
+                  # pprojectSymbol
+                  # pprojectToken
+              outAda = padaOf # outValue
+
+          pure $
+            pand'List
+              [ -- The datum is a (data Wr)/(data Sundae) = (data 0)/(data 1)
+                ptraceIfFalse "L27" $
+                  (ptryFromInlineDatum # out.datum)
+                    #== (pcon . PDatum . pforgetData . pdata $ dex)
+              , -- The staking address part is the preserved from the first project tokens holder
+                ptraceIfFalse "L28" $ phaveSameStakingCredentials # projectTokensHolderInputAddress # out.address
+              , -- The expected number of commited tokens is locked
+                pif
+                  (pisAda # pcommittedSymbol)
+                  (ptraceIfFalse "L29" $ (holderCommittedOut + oilAda) #== outCommitted)
+                  ( pand'List
+                      [ ptraceIfFalse "L30" $ holderCommittedOut #== outCommitted
+                      , -- Oil (this ensure all of the expected oil is locked in)
+                        -- Note that ada is unbounded for launches collecting non-ada
+                        -- but bounded for launches collecting ada as the committed tokens are checked exactly
+                        ptraceIfFalse "L31" $ oilAda #<= outAda
+                      ]
+                  )
+              , -- The expected number of project tokens is locked
+                ptraceIfFalse "L32" $ holderProjectOut #== outProject
+              , -- ada, committed and project tokens
+                -- in a weird case any of the expected values are 0, we allow less tokens
+                ptraceIfFalse "L33" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol outValue #<= 3
+              ]
+
+    tokenHolders <-
+      pletC
+        ( pfilter
+            # plam
+              ( \o ->
+                  ppaysToCredential # projectTokensHolderFinalValidatorHash # o
+              )
             # outputs
         )
-    projectTokensHolderOutputV <- pletC projectTokensHolderOutput.value
-    let outputHolderCommittedTokens =
-          pvalueOf
-            # projectTokensHolderOutputV
-            # pcommittedSymbol
-            # pcommittedToken
-        outputHolderProjectTokens =
-          pvalueOf
-            # projectTokensHolderOutputV
-            # pprojectSymbol
-            # pprojectToken
-        outputHolderAda =
-          pvalueOf # projectTokensHolderOutputV # padaSymbol # padaToken
+
     pure $
       pand'List
-        [ ptraceIfFalse "L30" $
-            (ptryFromInlineDatum # projectTokensHolderOutput.datum)
-              #== pcon (PDatum (pforgetData (pconstantData ())))
-        , ptraceIfFalse "L31" $ phaveSameStakingCredentials # projectTokensHolderInputAddress # projectTokensHolderOutput.address
-        , ptraceIfFalse "L32" $ inputHolderCommittedTokens + resultAcc.committedPerTx #== outputHolderCommittedTokens
-        , ptraceIfFalse "L33" $ inputHolderProjectTokens - resultAcc.distributedPerTx #== outputHolderProjectTokens
-        , ptraceIfFalse "L34" $ inputHolderAda #<= outputHolderAda
-        , ptraceIfFalse "L35" $ pvalueOf # mint # selfCs # pscriptHashToTokenName selfValidatorHash #== -1
-        , -- ada, committed and project tokens, and the tokens holder token
-          ptraceIfFalse "L36" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol projectTokensHolderOutputV #== 4
-        , ptraceIfFalse "L37" $ pnot # (pelem # pdata commitFoldCompensationIndex # outputNodesIndices)
-        , pletFields @["value", "address"] (pelemAt # commitFoldCompensationIndex # outputs) \commitCompensation ->
+        [ pcond
+            [
+              ( --  splitBps = 10_000 means everything goes to WingRiders
+                splitBps #== bpsScalingFactor
+              , ptraceIfFalse "L34" $
+                  isHolderOutputCorrect
+                    (passertSingleton "L35" # tokenHolders)
+                    (pcon PWr)
+                    wrHolderCommittedOut
+                    wrHolderProjectOut
+              )
+            ,
+              ( --  splitBps = 0 means everything goes to Sundae
+                splitBps #== 0
+              , ptraceIfFalse "L36" $
+                  isHolderOutputCorrect
+                    (passertSingleton "L37" # tokenHolders)
+                    (pcon PSundae)
+                    sundaeHolderCommittedOut
+                    sundaeHolderProjectOut
+              )
+            ]
+            ( -- In case we need both pools, we require strict ordering
+              pmatch (passertDoubleton tokenHolders) \(PPair outWr outSundae) ->
+                pand'List
+                  [ ptraceIfFalse "L38" $ isHolderOutputCorrect outWr (pcon PWr) wrHolderCommittedOut wrHolderProjectOut
+                  , ptraceIfFalse "L39" $ isHolderOutputCorrect outSundae (pcon PSundae) sundaeHolderCommittedOut sundaeHolderProjectOut
+                  ]
+            )
+        , -- We burn the rewards fold token and the project tokens holder token
+          ptraceIfFalse "L40" $ pvalueOf # mint # selfCs # pscriptHashToTokenName selfValidatorHash #== -1
+        , ptraceIfFalse "L41" $ pvalueOf # mint # projectTokensHolderCs # pscriptHashToTokenName projectTokensHolderFirstValidatorHash #== -1
+        , -- The commit fold compensations can't be reused as a node compensation
+          -- this check prevents a double satisfaction attack
+          ptraceIfFalse "L42" $ pnot # (pelem # pdata commitFoldCompensationIndex # outputNodesIndices)
+        , ptraceIfFalse "L43" $ pnot # (pelem # pdata daoCompensationIndex # outputNodesIndices)
+        , ptraceIfFalse "L44" $ pnot # (pelem # pdata ownerCompensationIndex # outputNodesIndices)
+        , ptraceIfFalse "L45" $ pnot # (daoCompensationIndex #== ownerCompensationIndex)
+        , ptraceIfFalse "L46" $ pnot # (daoCompensationIndex #== commitFoldCompensationIndex)
+        , ptraceIfFalse "L47" $ pnot # (ownerCompensationIndex #== commitFoldCompensationIndex)
+        , -- the commit fold is compensated, oil comes from the rewards fold utxo
+          pletFields @["value", "address"] (pelemAt # commitFoldCompensationIndex # outputs) \commitCompensation ->
             pand'List
-              [ ptraceIfFalse "L38" $ pvalueOf # commitCompensation.value # padaSymbol # padaToken #>= expectedOutAda
-              , ptraceIfFalse "L39" $ pcountOfUniqueTokens # commitCompensation.value #== 1
-              , ptraceIfFalse "L40" $ pfromData commitCompensation.address #== commitFoldOwner
+              [ ptraceIfFalse "L48" $ padaOf # commitCompensation.value #>= expectedOutAda
+              , ptraceIfFalse "L49" $ pcountOfUniqueTokens # commitCompensation.value #== 1
+              , ptraceIfFalse "L50" $ pfromData commitCompensation.address #== commitFoldOwner
+              ]
+        , -- The DAO is compensated
+          pletFields @["value", "address"] (pelemAt # daoCompensationIndex # outputs) \daoCompensation ->
+            pand'List
+              [ ptraceIfFalse "L51" $ daoCompensation.address #== daoFeeReceiver
+              , ptraceIfFalse "L52" $ pvalueOf # daoCompensation.value # pcommittedSymbol # pcommittedToken #>= daoCommittedOut
+              , ptraceIfFalse "L53" $ padaOf # daoCompensation.value #>= daoAdaFromCollateral
+              , -- Ada and the committed token, there's an edge case where the committed is zero
+                -- we allow up to 2 tokens
+                ptraceIfFalse "L54" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol daoCompensation.value #<= 2
+              ]
+        , -- The owner is compensated
+          pletFields @["value", "address"] (pelemAt # ownerCompensationIndex # outputs) \ownerCompensation ->
+            pand'List
+              [ ptraceIfFalse "L55" $ ownerCompensation.address #== launchOwner
+              , pif
+                  (pisAda # pcommittedSymbol)
+                  (ptraceIfFalse "L56" $ padaOf # ownerCompensation.value #>= ownerAda + launchOwnerCommittedOut)
+                  ( pand'List
+                      [ ptraceIfFalse "L57" $ pvalueOf # ownerCompensation.value # pcommittedSymbol # pcommittedToken #== launchOwnerCommittedOut
+                      , ptraceIfFalse "L58" $ padaOf # ownerCompensation.value #>= ownerAda
+                      ]
+                  )
+              , -- Ada and the committed token, there's an edge case where the committed is zero
+                -- we allow up to 2 tokens
+                ptraceIfFalse "L59" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol ownerCompensation.value #<= 2
               ]
         ]
 
@@ -727,11 +904,12 @@ pcheckMiddleRewardsFold
   inputHolderProjectTokens = unTermCont do
     projectTokensHolderOutput <-
       pletFieldsC @'["address", "datum", "value"]
-        ( passertSingleSpecificInput "L41"
-            # pid
-            # projectTokensHolderFirstValidatorHash
-            # projectTokensHolderCs
-            # pscriptHashToTokenName projectTokensHolderFirstValidatorHash
+        ( passertSingleton "L60"
+            #$ pfilter
+            # plam
+              ( \o ->
+                  ppaysToCredential # projectTokensHolderFirstValidatorHash # o
+              )
             # outputs
         )
     projectTokensHolderOutputV <- pletC projectTokensHolderOutput.value
@@ -745,10 +923,15 @@ pcheckMiddleRewardsFold
             # projectTokensHolderOutputV
             # pprojectSymbol
             # pprojectToken
-        outputHolderAda = pvalueOf # projectTokensHolderOutputV # padaSymbol # padaToken
+        outputHolderAda = padaOf # projectTokensHolderOutputV
+        outputHolderValidity =
+          pvalueOf
+            # projectTokensHolderOutputV
+            # projectTokensHolderCs
+            # pscriptHashToTokenName projectTokensHolderFirstValidatorHash
     foldOut <-
       pletFieldsC @'["datum", "value"]
-        ( passertSingleSpecificInput "L42"
+        ( passertSingleSpecificInput "L61"
             # pid
             # selfValidatorHash
             # selfCs
@@ -756,22 +939,24 @@ pcheckMiddleRewardsFold
             # outputs
         )
     foldOutD <- pletC (pfromPDatum @PRewardsFoldDatum # (ptryFromInlineDatum # foldOut.datum))
+
     pure $
       pand'List
-        [ ptraceIfFalse "L43" $ foldOutD #== expectedOutD
-        , ptraceIfFalse "L44" $ phaveSameStakingCredentials # projectTokensHolderInputAddress # projectTokensHolderOutput.address
-        , ptraceIfFalse "L45" $ pvalueOf # foldOut.value # padaSymbol # padaToken #>= expectedOutAda
+        [ ptraceIfFalse "L62" $ foldOutD #== expectedOutD
+        , ptraceIfFalse "L63" $ phaveSameStakingCredentials # projectTokensHolderInputAddress # projectTokensHolderOutput.address
+        , ptraceIfFalse "L64" $ padaOf # foldOut.value #>= expectedOutAda
         , -- ada and the rewards fold token
-          ptraceIfFalse "L46" $ pcountOfUniqueTokens # foldOut.value #== 2
-        , ptraceIfFalse "L47" $ projectTokensHolderInputDatum #== projectTokensHolderOutput.datum
-        , plet (inputHolderCommittedTokens + resultAcc.committedPerTx) \expectedCommitedTokens ->
+          ptraceIfFalse "L65" $ pcountOfUniqueTokens # foldOut.value #== 2
+        , ptraceIfFalse "L66" $ projectTokensHolderInputDatum #== projectTokensHolderOutput.datum
+        , plet (inputHolderCommittedTokens + resultAcc.committedPerTx) \expectedCommittedTokens ->
             pand'List
-              [ ptraceIfFalse "L48" $ expectedCommitedTokens #== outputHolderCommittedTokens
+              [ ptraceIfFalse "L67" $ expectedCommittedTokens #== outputHolderCommittedTokens
               , -- ada, committed (in case there are currently any) and project tokens, and the tokens holder token
-                ptraceIfFalse "L49" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol projectTokensHolderOutputV #== pif (expectedCommitedTokens #== 0) 3 4
+                ptraceIfFalse "L68" $ pcountOfUniqueTokensWithOverlap pcommittedSymbol projectTokensHolderOutputV #== pif (expectedCommittedTokens #== 0) 3 4
+              , ptraceIfFalse "L69" $ outputHolderValidity #== 1
               ]
-        , ptraceIfFalse "L50" $ inputHolderProjectTokens - resultAcc.distributedPerTx #== outputHolderProjectTokens
-        , ptraceIfFalse "L51" $ inputHolderAda #<= outputHolderAda
+        , ptraceIfFalse "L70" $ inputHolderProjectTokens - resultAcc.distributedPerTx #== outputHolderProjectTokens
+        , ptraceIfFalse "L71" $ inputHolderAda #<= outputHolderAda
         ]
 
 rewardsFoldScriptValidator :: RewardsFoldConfig -> Script

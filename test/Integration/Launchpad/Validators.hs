@@ -13,6 +13,7 @@ import Launchpad.Mint.ProjectTokensHolder qualified as PTH
 import Launchpad.Mint.RewardsFold qualified as R
 import Launchpad.Node qualified as N
 import Launchpad.PoolProof qualified as PP
+import Launchpad.PoolTypes (SundaeSettingsDatum)
 import Launchpad.ProjectTokensHolderFinal qualified as PTHF
 import Launchpad.ProjectTokensHolderFirst qualified as PTHFirst
 import Launchpad.RewardsFold qualified as R
@@ -28,7 +29,7 @@ projectTokensHolderFirstValidator config = case mkTypedValidatorPlutarchV2
   Left err -> error $ show err
   Right val -> val
 
-projectTokensHolderFinalValidator :: LaunchpadConfig -> TypedValidator () PTHF.TokenHolderRedeemerFinal
+projectTokensHolderFinalValidator :: LaunchpadConfig -> TypedValidator Dex PTHF.TokensHolderFinalRedeemer
 projectTokensHolderFinalValidator config = case mkTypedValidatorPlutarchV2
   (PTHF.projectTokensHolderValidator # pconstant (finalTokensHolderConfig config)) of
   Left err -> error $ show err
@@ -66,7 +67,7 @@ poolProofValidator config = case mkTypedValidatorPlutarchV2 (PP.poolProofValidat
   Left err -> error $ show err
   Right val -> val
 
-poolProofMintingPolicy :: LaunchpadConfig -> TypedPolicy ()
+poolProofMintingPolicy :: LaunchpadConfig -> TypedPolicy Dex
 poolProofMintingPolicy config = case mkTypedPolicyPlutarchV2 (PP.ppoolProofMintingPolicy # pconstant (poolProofPolicyConfig config)) of
   Left err -> error $ show err
   Right val -> val
@@ -104,5 +105,10 @@ poolMintingPolicy = case mkTypedPolicyPlutarchV2 pvalidateFreePolicy of
 
 mockFactoryScript :: TypedValidator () ()
 mockFactoryScript = case mkTypedValidatorPlutarchV2 (plam $ \_ _ _ -> popaque (pconstant ())) of
+  Left err -> error $ show err
+  Right val -> val
+
+mockSundaeSettingsScript :: TypedValidator SundaeSettingsDatum ()
+mockSundaeSettingsScript = case mkTypedValidatorPlutarchV2 (plam $ \_ _ _ -> popaque (plam $ \_ -> pconstant ())) of
   Left err -> error $ show err
   Right val -> val

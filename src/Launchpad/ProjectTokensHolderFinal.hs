@@ -1,6 +1,4 @@
 {-# LANGUAGE BlockArguments #-}
-{-# LANGUAGE PartialTypeSignatures #-}
-{-# OPTIONS_GHC -Wno-partial-type-signatures #-}
 
 module Launchpad.ProjectTokensHolderFinal (
   projectTokensHolderScriptValidator,
@@ -8,7 +6,7 @@ module Launchpad.ProjectTokensHolderFinal (
   projectTokensHolderScriptAddress,
   projectTokensHolderScript,
   projectTokensHolderValidator,
-  TokenHolderRedeemerFinal (..),
+  TokensHolderFinalRedeemer (..),
   TokensHolderFinalConfig (..),
 )
 where
@@ -17,41 +15,22 @@ import Data.ByteString.Hash (blake2b_256)
 import Data.Text.Encoding (encodeUtf8)
 import Launchpad.Constants qualified as C
 import Launchpad.PoolTypes
-import Launchpad.Types (PPoolProofDatum)
-import Launchpad.Util (pisCorrectPool)
+import Launchpad.Types
+import Launchpad.Util (poolSundaeLpName, poolSundaeNftName)
 import Other.Vesting (PVestingDatum (..))
 import Plutarch
-import Plutarch.Api.V1.Value (padaSymbol, padaToken, pvalueOf)
+import Plutarch.Api.V1.Value (pvalueOf)
 import Plutarch.Api.V2
 import Plutarch.Bool
 import Plutarch.Crypto (pblake2b_256)
 import Plutarch.DataRepr
-import Plutarch.Extra.Field (pletAllC)
 import Plutarch.Extra.IsData (EnumIsData (..), PlutusTypeEnumData)
-import Plutarch.Extra.ScriptContext (pfromPDatum, ptryFromDatumHash, ptryFromInlineDatum)
+import Plutarch.Extra.ScriptContext (pfromPDatum, ptryFromInlineDatum)
 import Plutarch.Extra.TermCont
 import Plutarch.Lift
 import Plutarch.PlutusScript
 import Plutarch.Prelude
-import Plutarch.Util (
-  pand'List,
-  passertSingleton,
-  pcond,
-  pcountAllScriptInputs,
-  pcountOfUniqueTokens,
-  pcountOfUniqueTokensWithOverlap,
-  pcountScriptInputs,
-  pdnothing,
-  perrorIfFalse,
-  pgetInput,
-  pisAda,
-  ppaysToCredential,
-  ptryFindOutputWithAsset,
-  ptryLookup,
-  ptxInInfoResolved,
-  (#>),
-  (#>=),
- )
+import Plutarch.Util
 import Plutus.Util
 import PlutusLedgerApi.V2
 import PlutusTx qualified
@@ -65,15 +44,12 @@ import PlutusTx qualified
 -}
 data TokensHolderFinalConfig = TokensHolderFinalConfig
   { owner :: Address
-  , daoFeeUnits :: Integer
-  , daoFeeBase :: Integer
-  , tokensToDistribute :: Integer
-  , raisedTokensPoolPartPercentage :: Integer
-  , totalTokens :: Integer
-  , collateral :: Integer
-  , poolSymbol :: CurrencySymbol
-  , poolValidatorHash :: ScriptHash
-  , factoryValidatorHash :: ScriptHash
+  , wrPoolSymbol :: CurrencySymbol
+  , wrPoolValidatorHash :: ScriptHash
+  , wrFactoryValidatorHash :: ScriptHash
+  , sundaePoolScriptHash :: ScriptHash
+  , sundaeFeeTolerance :: Integer
+  , sundaeSettingsCurrencySymbol :: CurrencySymbol
   , poolProofValidatorHash :: ScriptHash
   , vestingValidatorHash :: ScriptHash
   , vestingPeriodDuration :: POSIXTime
@@ -98,15 +74,12 @@ data PTokensHolderFinalConfig (s :: S)
           s
           ( PDataRecord
               [ "owner" ':= PAddress
-              , "daoFeeUnits" ':= PInteger
-              , "daoFeeBase" ':= PInteger
-              , "tokensToDistribute" ':= PInteger
-              , "raisedTokensPoolPartPercentage" ':= PInteger
-              , "totalTokens" ':= PInteger
-              , "collateral" ':= PInteger
-              , "poolSymbol" ':= PCurrencySymbol
-              , "poolValidatorHash" ':= PScriptHash
-              , "factoryValidatorHash" ':= PScriptHash
+              , "wrPoolSymbol" ':= PCurrencySymbol
+              , "wrPoolValidatorHash" ':= PScriptHash
+              , "wrFactoryValidatorHash" ':= PScriptHash
+              , "sundaePoolScriptHash" ':= PScriptHash
+              , "sundaeFeeTolerance" ':= PInteger
+              , "sundaeSettingsCurrencySymbol" ':= PCurrencySymbol
               , "poolProofValidatorHash" ':= PScriptHash
               , "vestingValidatorHash" ':= PScriptHash
               , "vestingPeriodDuration" ':= PPOSIXTime
@@ -136,23 +109,20 @@ deriving via
   instance
     (PConstantDecl TokensHolderFinalConfig)
 
-{- | Share token names are unique per pool.
+{- | Share token names are unique per pool for WingRiders.
 In V2 they are computed in the following way:
 shareTokenName = blake2b (blake2b poolType <> blake2b aScale <> blake2b bScale <> blake2b assetA <> blake2b assetB)
 
 Note that we don't support stableswap pools in the launchpad,
 hence the pool type and the scales are statically known
 -}
-pshareTokenName ::
-  Term
-    s
-    ( PCurrencySymbol
-        :--> PTokenName
-        :--> PCurrencySymbol
-        :--> PTokenName
-        :--> PTokenName
-    )
-pshareTokenName = plam \raisingSymbol raisingToken projectSymbol projectToken ->
+pwrShareTokenName ::
+  Term s PCurrencySymbol ->
+  Term s PTokenName ->
+  Term s PCurrencySymbol ->
+  Term s PTokenName ->
+  Term s PTokenName
+pwrShareTokenName raisingSymbol raisingToken projectSymbol projectToken =
   let assetRaisingHash = pblake2b_256 # (pto raisingSymbol <> pto raisingToken)
       assetProjectHash = pblake2b_256 # (pto projectSymbol <> pto projectToken)
       assetsHash =
@@ -170,44 +140,34 @@ pshareTokenName = plam \raisingSymbol raisingToken projectSymbol projectToken ->
     bScaleHash = blake2b_256 $ encodeUtf8 "1"
     staticPart = poolTypeIdHash <> aScaleHash <> bScaleHash
 
-ppaysAtleastToAddress :: Term s (PCurrencySymbol :--> PTokenName :--> PInteger :--> PAddress :--> PTxOut :--> PBool)
-ppaysAtleastToAddress = phoistAcyclic $
-  plam \symbol token amount address out -> pletFields @["address", "value"] out \outF ->
-    (outF.address #== address)
-      #&& pand'List
-        [ pvalueOf # outF.value # symbol # token #>= amount
-        , pcountOfUniqueTokensWithOverlap symbol outF.value #== 2
-        ]
-
-data TokenHolderRedeemerFinal
-  = PoolExists
-  | NoPool
+-- Encoded as an integer
+data TokensHolderFinalRedeemer
+  = FailedFlow
+  | NormalFlow
   deriving stock (Generic, Enum, Bounded)
-  deriving (PlutusTx.ToData, PlutusTx.FromData) via (EnumIsData TokenHolderRedeemerFinal)
+  deriving (PlutusTx.ToData, PlutusTx.FromData) via (EnumIsData TokensHolderFinalRedeemer)
 
-data PTokenHolderRedeemerFinal (s :: S)
-  = PPoolExists
-  | PNoPool
+-- Encoded as an integer
+data PTokensHolderFinalRedeemer (s :: S)
+  = PFailedFlow
+  | PNormalFlow
   deriving stock (Generic, Enum, Bounded)
   deriving anyclass (PlutusType, PIsData, PEq, PShow)
 
-instance DerivePlutusType PTokenHolderRedeemerFinal where
+instance DerivePlutusType PTokensHolderFinalRedeemer where
   type DPTStrat _ = PlutusTypeEnumData
 
-instance PTryFrom PData (PAsData PTokenHolderRedeemerFinal)
+instance PTryFrom PData (PAsData PTokensHolderFinalRedeemer)
 
-{-
-    The pool doesn't exist:
-        there is a compensation output sent to the launchpad owner
+{- |
+    The normal flow (pool creation):
         there is a pool output utxo with the correct pool validity token
-        the pool output datum contains the correct asset pair
+        the pool is from the correct dex stored in the datum
         there is a vesting contract output utxo
         the vesting contract output has all the shares given to the user by the pool
         the vesting contract output holds at most 2 unique tokens, ADA and shares
-        a Dao fee is sent to the DAO wallet:
-            all the remaining raised tokens times raisedTokensPoolPartPercentage divided by 100 are locked in the pool
-        DAO wallet utxo holds at most 2 unique tokens, ADA and raised token
-        all the project tokens from the launchpad project tokens holder utxo are locked in the pool
+        the raised tokens are locked in the pool (also ensures pool assets)
+        the project tokens are locked in the pool (also ensures pool assets)
         the beneficiary of the vesting contract is the launchpad owner
         the vestingAsset of the vesting contract is the pool shares
         the totalVestingQty of the vesting contract is the total amount of shares given to the user
@@ -218,41 +178,54 @@ instance PTryFrom PData (PAsData PTokenHolderRedeemerFinal)
             the vestingPeriodStart + a predetermined value
         the totalInstallments of the vesting contract is a predetermined value
         there are two script inputs
-        there is a factory script in the inputs
-    The pool exists:
-        there is a compensation output sent to the launchpad owner
-        there is a pool proof utxo ref input
-        there is a utxo output sent to the DAO wallet's address, its value is:
-            the receiving tokens of the launchpad project tokens holder times raisedTokensPoolPartPercentage
-            divided by 100 + the Dao fee + all of its project tokens
-        DAO wallet utxo holds at most 3 unique tokens, ADA project token, raised token
-        there are two script inputs
+        for Wr:
+          there is a factory script in the inputs
+        for Sundae:
+          the locked pool creation fee matches the settings pool creation fee exactly
+          the locked pool creation fee is below or equal to the tolerance
+
+    The failed flow (no pool is created):
+        there is a utxo output sent to the DAO wallet's address
+        the DAO wallet utxo holds at most 3 unique token: ADA, project token, raised token
+        the DAO wallet utxo holds all project & raised tokens from the project tokens holder
+        there is one script input
+        for Wr:
+          there is a pool proof utxo ref input with Wr datum
+        for Sundae:
+          there is a Sundae settings utxo ref input
+          the settings utxo has the correct nft
+          the settings' pool creation fee is above the tolerance
 -}
 projectTokensHolderValidatorTyped ::
-  Term s (PTokensHolderFinalConfig :--> PTokenHolderRedeemerFinal :--> PScriptContext :--> PUnit)
-projectTokensHolderValidatorTyped = phoistAcyclic $ plam \cfg redeemer context -> unTermCont do
-  ctxF <- pletAllC context
-  infoF <- pletFieldsC @'["inputs", "outputs", "signatories", "mint", "datums", "referenceInputs"] ctxF.txInfo
+  Term s PTokensHolderFinalConfig ->
+  Term s PDex ->
+  Term s PTokensHolderFinalRedeemer ->
+  Term s PScriptContext ->
+  Term s PBool
+projectTokensHolderValidatorTyped cfg datum redeemer context = unTermCont do
+  ctxF <- pletFieldsC @'["txInfo", "purpose"] context
+  infoF <- pletFieldsC @'["inputs", "outputs", "signatories", "mint", "referenceInputs"] ctxF.txInfo
+
   mint <- pletC infoF.mint
   txOutputs <- pletC infoF.outputs
   txInputs <- pletC infoF.inputs
   txRefInputs <- pletC infoF.referenceInputs
   PSpending ownRef <- pmatchC ctxF.purpose
+
   let ownInput = pgetInput # txInputs # (pfield @"_0" # ownRef)
+
   ownInputF <- pletFieldsC @["address", "value"] ownInput
   ownInputValue <- pletC ownInputF.value
+
   cfgF <-
     pletFieldsC
       @'[ "owner"
-        , "daoFeeUnits"
-        , "daoFeeBase"
-        , "tokensToDistribute"
-        , "raisedTokensPoolPartPercentage"
-        , "totalTokens"
-        , "collateral"
-        , "poolSymbol"
-        , "poolValidatorHash"
-        , "factoryValidatorHash"
+        , "wrPoolSymbol"
+        , "wrPoolValidatorHash"
+        , "wrFactoryValidatorHash"
+        , "sundaePoolScriptHash"
+        , "sundaeFeeTolerance"
+        , "sundaeSettingsCurrencySymbol"
         , "vestingValidatorHash"
         , "vestingPeriodDuration"
         , "vestingPeriodDurationToFirstUnlock"
@@ -266,99 +239,258 @@ projectTokensHolderValidatorTyped = phoistAcyclic $ plam \cfg redeemer context -
         , "projectToken"
         ]
       cfg
+
   raisingCs <- pletC cfgF.raisingSymbol
   raisingTn <- pletC cfgF.raisingToken
   projectCs <- pletC cfgF.projectSymbol
   projectTn <- pletC cfgF.projectToken
-  poolCs <- pletC cfgF.poolSymbol
-  plpShareTn <- pletC $ pshareTokenName # raisingCs # raisingTn # projectCs # projectTn
 
-  numRaised <-
-    pletC $
-      pif
-        (pisAda # raisingCs)
-        (pvalueOf # ownInputValue # raisingCs # raisingTn - cfgF.collateral)
-        (pvalueOf # ownInputValue # raisingCs # raisingTn)
+  numRaised <- pletC $ pvalueOf # ownInputValue # raisingCs # raisingTn
 
-  pure
-    $ perrorIfFalse
-      #$ ptraceIfFalse "J0"
-    $ pand'List
+  pure $
+    pand'List
       [ pmatch redeemer \case
-          PNoPool ->
-            pvalidateNoPool
-              cfgF.owner
-              cfgF.factoryValidatorHash
-              (cfgF.daoFeeReceiver, cfgF.daoFeeUnits, cfgF.daoFeeBase)
-              (cfgF.vestingValidatorHash, cfgF.vestingPeriodInstallments, cfgF.vestingPeriodDuration, cfgF.vestingPeriodDurationToFirstUnlock, cfgF.vestingPeriodStart)
-              (poolCs, cfgF.poolValidatorHash, plpShareTn)
-              (projectCs, projectTn)
-              (raisingCs, raisingTn)
-              (numRaised, cfgF.raisedTokensPoolPartPercentage, cfgF.collateral)
-              ownInputValue
-              txInputs
-              txOutputs
-              infoF.datums
-              mint
-          PPoolExists ->
-            pvalidatePoolExists
-              cfgF.owner
-              (cfgF.daoFeeReceiver, cfgF.daoFeeUnits, cfgF.daoFeeBase)
+          PNormalFlow ->
+            pmatch datum \case
+              PWr ->
+                pvalidateNormalFlowWr
+                  cfgF.owner
+                  cfgF.wrFactoryValidatorHash
+                  (cfgF.vestingValidatorHash, cfgF.vestingPeriodInstallments, cfgF.vestingPeriodDuration, cfgF.vestingPeriodDurationToFirstUnlock, cfgF.vestingPeriodStart)
+                  (cfgF.wrPoolSymbol, cfgF.wrPoolValidatorHash)
+                  (projectCs, projectTn)
+                  (raisingCs, raisingTn)
+                  numRaised
+                  ownInputValue
+                  txInputs
+                  txOutputs
+                  mint
+              PSundae ->
+                pvalidateNormalFlowSundae
+                  cfgF.owner
+                  (cfgF.vestingValidatorHash, cfgF.vestingPeriodInstallments, cfgF.vestingPeriodDuration, cfgF.vestingPeriodDurationToFirstUnlock, cfgF.vestingPeriodStart)
+                  cfgF.sundaePoolScriptHash
+                  cfgF.sundaeFeeTolerance
+                  cfgF.sundaeSettingsCurrencySymbol
+                  (projectCs, projectTn)
+                  (raisingCs, raisingTn)
+                  numRaised
+                  ownInputValue
+                  txInputs
+                  txRefInputs
+                  txOutputs
+                  mint
+          PFailedFlow ->
+            pvalidateFailedFlow
+              cfgF.daoFeeReceiver
+              cfgF.sundaeSettingsCurrencySymbol
+              cfgF.sundaeFeeTolerance
               cfgF.poolProofValidatorHash
               (projectCs, projectTn)
               (raisingCs, raisingTn)
-              (numRaised, cfgF.raisedTokensPoolPartPercentage, cfgF.collateral)
+              numRaised
               ownInputValue
               txInputs
               txOutputs
               txRefInputs
+              datum
       ]
 
-pvalidatePoolExists ::
+pvalidateNormalFlowSundae ::
   Term s PAddress ->
-  (Term s PAddress, Term s PInteger, Term s PInteger) ->
+  (Term s PScriptHash, Term s PInteger, Term s PPOSIXTime, Term s PPOSIXTime, Term s PPOSIXTime) ->
+  Term s PScriptHash ->
+  Term s PInteger ->
+  Term s PCurrencySymbol ->
+  (Term s PCurrencySymbol, Term s PTokenName) ->
+  (Term s PCurrencySymbol, Term s PTokenName) ->
+  Term s PInteger ->
+  Term s (PValue anyKey anyAmount) ->
+  Term s (PBuiltinList PTxInInfo) ->
+  Term s (PBuiltinList PTxInInfo) ->
+  Term s (PBuiltinList PTxOut) ->
+  Term s (PValue 'Sorted 'NoGuarantees) ->
+  Term s PBool
+pvalidateNormalFlowSundae
+  owner
+  (vestingValidatorHash, vestingPeriodInstallments, vestingPeriodDuration, vestingPeriodDurationToFirstUnlock, vestingPeriodStartTime)
+  poolScriptHash
+  feeTolerance
+  settingsCurrencySymbol
+  (projectCs, projectTn)
+  (raisingCs, raisingTn)
+  numRaised
+  ownInputValue
+  txInputs
+  txReferenceInputs
+  txOutputs
+  mint = unTermCont do
+    let owedToPool = numRaised
+
+    let poolUTxO =
+          passertSingleton "J1"
+            #$ pfilter
+            # plam (\o -> ppaysToCredential # poolScriptHash # o)
+            # txOutputs
+    poolOutputF <- pletFieldsC @["address", "datum", "value"] poolUTxO
+
+    let poolDatum = pfromPDatum @PSundaePoolDatum #$ ptryFromInlineDatum # poolOutputF.datum
+    pool <- pletFieldsC @'["identifier", "circulatingLp", "protocolFees"] poolDatum
+
+    poolIdentifier <- pletC pool.identifier
+    -- The pool minting policy allows setting the protocolFees above what's required
+    -- by the Sundae settings, we require an exact match
+    protocolFees <- pletC pool.protocolFees
+    let poolCs = pcon . PCurrencySymbol . pto $ poolScriptHash
+    plpShareTn <- pletC (poolSundaeLpName poolIdentifier)
+    poolNft <- pletC (poolSundaeNftName poolIdentifier)
+
+    -- All minted shares are given to the user
+    -- The exact value is stored in the datum
+    -- It's validated by the pool minting policy
+    userGivenShares <- pletC pool.circulatingLp
+
+    let vestingOutput =
+          ptryFindOutputWithAsset
+            # vestingValidatorHash
+            # (pcon . PCurrencySymbol . pto $ poolScriptHash)
+            # plpShareTn
+            # userGivenShares
+            # txOutputs
+    vesting <- pletFieldsC @["datum", "value"] vestingOutput
+    let vestingDatum = pfromPDatum @PVestingDatum #$ ptryFromInlineDatum # vesting.datum
+    vestingDatumF <-
+      pletFieldsC
+        @[ "beneficiary"
+         , "vestingSymbol"
+         , "vestingToken"
+         , "totalVestingQty"
+         , "vestingPeriodStart"
+         , "vestingPeriodEnd"
+         , "firstUnlockPossibleAfter"
+         , "totalInstallments"
+         ]
+        vestingDatum
+
+    let settings = findSundaeSettingsDatum txReferenceInputs settingsCurrencySymbol
+
+    -- NOTE: staking choice is restricted by the "settings" ref utxo, we don't check it
+    pure . ptraceIfFalse "J2" $
+      pand'List
+        [ -- The tokens holder
+          ptraceIfFalse "J3" $ pcountAllScriptInputs # txInputs #== 1
+        , -- The Sundae pool creation fee is tolerated by the launch
+          ptraceIfFalse "J4" $ protocolFees #<= feeTolerance
+        , -- The deposited Sundae pool creation fee is the same as in the settings
+          ptraceIfFalse "J5" $ protocolFees #== pfield @"poolCreationFee" # settings
+        , ptraceIfFalse "J6" $ pcountOfUniqueTokens # vesting.value #== 2
+        , -- The pool receives all project tokens, we don't need to check the datum assets, as the policy does that
+          ptraceIfFalse "J7" $ pvalueOf # poolOutputF.value # projectCs # projectTn #== pvalueOf # ownInputValue # projectCs # projectTn
+        , -- The pool receives all raising tokens or more, we don't need to check the datum assets, as the policy does that
+          ptraceIfFalse "J8" $
+            pif
+              (pisAda # raisingCs)
+              -- Please note that it's possible to add more ada and increase the project token price
+              -- when the project is raising ada;
+              -- That's done to allow finishing the launch when there's a pool creation fee
+              -- and the utxo doesn't have enough ada to cover it;
+              -- Note that in case the fee is above the tolerance, the failing flow must be used instead.
+              (pvalueOf # poolOutputF.value # raisingCs # raisingTn #>= owedToPool)
+              (pvalueOf # poolOutputF.value # raisingCs # raisingTn #== owedToPool)
+        , -- The nft was minted, the policy will ensure it's stored in the pool
+          ptraceIfFalse "J9" $ pvalueOf # mint # poolCs # poolNft #== 1
+        , -- The vesting has correct datum
+          ptraceIfFalse "J10" $ vestingDatumF.beneficiary #== owner
+        , ptraceIfFalse "J11" $ vestingDatumF.vestingSymbol #== poolCs
+        , ptraceIfFalse "J12" $ vestingDatumF.vestingToken #== plpShareTn
+        , ptraceIfFalse "J13" $ vestingDatumF.totalVestingQty #== userGivenShares
+        , ptraceIfFalse "J14" $ vestingDatumF.vestingPeriodStart #== vestingPeriodStartTime
+        , ptraceIfFalse "J15" $ vestingDatumF.vestingPeriodEnd #== vestingPeriodStartTime + vestingPeriodDuration
+        , ptraceIfFalse "J16" $ vestingDatumF.firstUnlockPossibleAfter #== vestingPeriodStartTime + vestingPeriodDurationToFirstUnlock
+        , ptraceIfFalse "J17" $ vestingDatumF.totalInstallments #== vestingPeriodInstallments
+        ]
+
+-- NOTE: we need to validate it because no Sundae-side validation is being run when the fee is above the tolerance
+findSundaeSettingsDatum :: Term s (PBuiltinList PTxInInfo) -> Term s PCurrencySymbol -> Term s PSundaeSettingsDatum
+findSundaeSettingsDatum referenceInputs settingsCurrencySymbol = unTermCont do
+  let settings =
+        passertSingleton "J18"
+          #$ pfilter
+          # plam
+            ( \o -> unTermCont do
+                settingsOutput <- pletFieldsC @'["value", "datum"] $ ptxInInfoResolved # o
+                pure (pvalueOf # settingsOutput.value # settingsCurrencySymbol # pconstant C.settingsNftName #== 1)
+            )
+          # referenceInputs
+  settingsOutput <- pletFieldsC @'["value", "datum"] $ ptxInInfoResolved # settings
+  settingsDatum <- pletC $ pfromPDatum #$ ptryFromInlineDatum # settingsOutput.datum
+  pure settingsDatum
+
+pvalidateFailedFlow ::
+  Term s PAddress ->
+  Term s PCurrencySymbol ->
+  Term s PInteger ->
   Term s PScriptHash ->
   (Term s PCurrencySymbol, Term s PTokenName) ->
   (Term s PCurrencySymbol, Term s PTokenName) ->
-  (Term s PInteger, Term s PInteger, Term s PInteger) ->
+  Term s PInteger ->
   Term s (PValue 'Sorted 'Positive) ->
   Term s (PBuiltinList PTxInInfo) ->
   Term s (PBuiltinList PTxOut) ->
   Term s (PBuiltinList PTxInInfo) ->
+  Term s PDex ->
   Term s PBool
-pvalidatePoolExists
-  owner
-  (daoFeeReceiver, daoFeeUnits, daoFeeBase)
+pvalidateFailedFlow
+  daoFeeReceiver
+  settingsCurrencySymbol
+  sundaeFeeTolerance
   poolProofValidatorHash
   (projectCs, projectTn)
   (raisingCs, raisingTn)
-  (numRaised, raisedTokensPoolPartPercentage, returnedCollateral)
+  numRaised
   ownInputValue
   txInputs
   txOutputs
-  txRefInputs = unTermCont do
-    let poolProofTxIn =
-          passertSingleton "one pool proof"
-            #$ pfilter
-            # plam
-              (\o -> (ppaysToCredential # poolProofValidatorHash # (ptxInInfoResolved # o)))
-            # txRefInputs
-        poolProofOut = pfromData (ptxInInfoResolved # poolProofTxIn)
-        poolProofDatum = pfromPDatum @PPoolProofDatum # (ptryFromInlineDatum #$ pfield @"datum" # poolProofOut)
-    poolProofFields <- pletFieldsC @'["projectSymbol", "projectToken", "raisingSymbol", "raisingToken"] poolProofDatum
-    owedToDao <- pletC (pdiv # (daoFeeUnits * numRaised) # daoFeeBase)
+  txRefInputs
+  dex = unTermCont do
+    let dexChecks = pmatch dex \case
+          -- For Wr the failing happens when a pool already exists
+          -- we validate it with a pool proof reference utxo
+          PWr -> unTermCont do
+            let poolProofTxIn =
+                  passertSingleton "J19"
+                    #$ pfilter
+                    # plam
+                      (\o -> ppaysToCredential # poolProofValidatorHash # (ptxInInfoResolved # o))
+                    # txRefInputs
+                poolProofOut = pfromData (ptxInInfoResolved # poolProofTxIn)
+                poolProofDatum = pfromPDatum @PPoolProofDatum # (ptryFromInlineDatum #$ pfield @"datum" # poolProofOut)
+            poolProofFields <- pletFieldsC @'["projectSymbol", "projectToken", "raisingSymbol", "raisingToken", "dex"] poolProofDatum
+            pure $
+              pand'List
+                [ ptraceIfFalse "J20" $ poolProofFields.projectSymbol #== projectCs
+                , ptraceIfFalse "J21" $ poolProofFields.projectToken #== projectTn
+                , ptraceIfFalse "J22" $ poolProofFields.raisingSymbol #== raisingCs
+                , ptraceIfFalse "J23" $ poolProofFields.raisingToken #== raisingTn
+                , ptraceIfFalse "J24" $ poolProofFields.dex #== pcon PWr
+                ]
+          -- For Sundae the failing happens when the pool creation fee is above the tolerance
+          -- NOTE: in case of a stables-collecting launch where the pool creation fee is above min ada
+          --       the utxo won't have enough ada to pay for the fee
+          --       it's still possible to finish with the normal flow by providing the fee externally
+          --       it's explicitely not a failure scenario
+          PSundae -> unTermCont do
+            let settings = findSundaeSettingsDatum txRefInputs settingsCurrencySymbol
+                poolCreationFee = pfield @"poolCreationFee" # settings
+            pure $ ptraceIfFalse "J25" $ poolCreationFee #> sundaeFeeTolerance
+
     projectTokens <- pletC (pvalueOf # ownInputValue # projectCs # projectTn)
-    raisedToDao <- pletC ((pdiv # ((numRaised - owedToDao) * raisedTokensPoolPartPercentage) # 100) + owedToDao)
-    let owedToOwner = numRaised - raisedToDao
-    pure $
-      pand'List
-        [ -- The project tokens holder
-          pcountAllScriptInputs # txInputs #== 1
-        , poolProofFields.projectSymbol #== projectCs
-        , poolProofFields.projectToken #== projectTn
-        , poolProofFields.raisingSymbol #== raisingCs
-        , poolProofFields.raisingToken #== raisingTn
-        , pany
+    let raisedToDao = numRaised
+    pure . ptraceIfFalse "J27" . pand'List $
+      [ -- The project tokens holder
+        ptraceIfFalse "J28" $ pcountAllScriptInputs # txInputs #== 1
+      , ptraceIfFalse "J29" $
+          pany
             # plam
               ( \txOut -> unTermCont do
                   txoFields <- pletFieldsC @["address", "value"] txOut
@@ -368,86 +500,52 @@ pvalidatePoolExists
                       #&& pand'List
                         [ pvalueOf # txOutValue # raisingCs # raisingTn #== raisedToDao
                         , pvalueOf # txOutValue # projectCs # projectTn #== projectTokens
-                        , pcountOfUniqueTokensWithOverlap raisingCs txOutValue #== 3
+                        , -- In a weird case any the computed values is 0 we allow less tokens
+                          pcountOfUniqueTokensWithOverlap raisingCs txOutValue #<= 3
                         ]
               )
             # txOutputs
-        , pany
-            # plam
-              ( \o -> unTermCont do
-                  txoFields <- pletFieldsC @["address", "value"] o
-                  pure $
-                    (txoFields.address #== owner)
-                      #&& pand'List
-                        [ pif
-                            (pisAda # raisingCs)
-                            (pvalueOf # txoFields.value # raisingCs # raisingTn #>= returnedCollateral + owedToOwner)
-                            ( pand'List
-                                [ pvalueOf # txoFields.value # raisingCs # raisingTn #== owedToOwner
-                                , pvalueOf # txoFields.value # padaSymbol # padaToken #>= returnedCollateral
-                                ]
-                            )
-                        , -- ada && raising token
-                          pcountOfUniqueTokensWithOverlap raisingCs txoFields.value #== 2
-                        ]
-              )
-            # txOutputs
-        ]
+      , dexChecks
+      ]
 
-pvalidateNoPool ::
+pvalidateNormalFlowWr ::
   Term s PAddress ->
   Term s PScriptHash ->
-  (Term s PAddress, Term s PInteger, Term s PInteger) ->
   (Term s PScriptHash, Term s PInteger, Term s PPOSIXTime, Term s PPOSIXTime, Term s PPOSIXTime) ->
-  (Term s PCurrencySymbol, Term s PScriptHash, Term s PTokenName) ->
+  (Term s PCurrencySymbol, Term s PScriptHash) ->
   (Term s PCurrencySymbol, Term s PTokenName) ->
   (Term s PCurrencySymbol, Term s PTokenName) ->
-  (Term s PInteger, Term s PInteger, Term s PInteger) ->
+  Term s PInteger ->
   Term s (PValue 'Sorted 'Positive) ->
   Term s (PBuiltinList PTxInInfo) ->
   Term s (PBuiltinList PTxOut) ->
-  Term s (PMap 'Unsorted PDatumHash PDatum) ->
   Term s (PValue 'Sorted 'NoGuarantees) ->
   Term s PBool
-pvalidateNoPool
+pvalidateNormalFlowWr
   owner
   factoryValidatorHash
-  (daoFeeReceiver, daoFeeUnits, daoFeeBase)
   (vestingValidatorHash, vestingPeriodInstallments, vestingPeriodDuration, vestingPeriodDurationToFirstUnlock, vestingPeriodStartTime)
-  (poolCs, poolValidatorHash, plpShareTn)
+  (poolCs', poolValidatorHash)
   (projectCs, projectTn)
   (raisingCs, raisingTn)
-  (numRaised, raisedTokensPoolPartPercentage, returnedCollateral)
+  numRaised
   ownInputValue
   txInputs
   txOutputs
-  datums
   mint = unTermCont do
-    owedToDao <- pletC $ pdiv # (daoFeeUnits * numRaised) # daoFeeBase
-    owedToPool <- pletC $ pdiv # ((numRaised - owedToDao) * raisedTokensPoolPartPercentage) # 100
-    owedToOwner <- pletC $ numRaised - owedToDao - owedToPool
+    plpShareTn <- pletC $ pwrShareTokenName raisingCs raisingTn projectCs projectTn
+    poolCs <- pletC poolCs'
 
     let mintedShares = pvalueOf # mint # poolCs # plpShareTn
         poolUTxO =
           ptryFindOutputWithAsset
             # poolValidatorHash
             # poolCs
-            # pconstant C.lpValidityTokenName
+            # pconstant C.wrLpValidityTokenName
             # 1
             # txOutputs
 
-    poolOutputF <- pletFieldsC @["address", "datum", "value"] poolUTxO
-
-    let poolDatum = pfromPDatum @PPoolConstantProductDatum #$ (ptryFromInlineDatum # poolOutputF.datum)
-
-    poolDatumF <- pletFieldsC @'["assetASymbol", "assetAToken", "assetBSymbol", "assetBToken"] poolDatum
-
-    let correctPool =
-          pisCorrectPool
-            (projectCs, projectTn)
-            (raisingCs, raisingTn)
-            (poolDatumF.assetASymbol, poolDatumF.assetAToken)
-            (poolDatumF.assetBSymbol, poolDatumF.assetBToken)
+    poolOutputF <- pletFieldsC @["address", "value"] poolUTxO
 
     let poolShareTokens =
           pvalueOf
@@ -465,7 +563,7 @@ pvalidateNoPool
             # userGivenShares
             # txOutputs
     vesting <- pletFieldsC @["datum", "value"] vestingOutput
-    let vestingDatum = pfromPDatum @PVestingDatum #$ ptryLookup # (ptryFromDatumHash # vesting.datum) # datums
+    let vestingDatum = pfromPDatum @PVestingDatum #$ ptryFromInlineDatum # vesting.datum
 
     vestingDatumF <-
       pletFieldsC
@@ -479,52 +577,35 @@ pvalidateNoPool
          , "totalInstallments"
          ]
         vestingDatum
-    pure $
-      pand'List
-        [ -- The factory and the project tokens holder
-          pcountAllScriptInputs # txInputs #== 2
-        , pcountScriptInputs # factoryValidatorHash # txInputs #== 1
-        , pany
-            # (ppaysAtleastToAddress # raisingCs # raisingTn # owedToDao # daoFeeReceiver)
-            # txOutputs
-        , pany
-            # plam
-              ( \o -> pletFields @["address", "value"] o \oF ->
-                  (oF.address #== owner)
-                    #&& pand'List
-                      [ pif
-                          (pisAda # raisingCs)
-                          (pvalueOf # oF.value # raisingCs # raisingTn #>= returnedCollateral + owedToOwner)
-                          ( pand'List
-                              [ pvalueOf # oF.value # raisingCs # raisingTn #== owedToOwner
-                              , pvalueOf # oF.value # padaSymbol # padaToken #>= returnedCollateral
-                              ]
-                          )
-                      , -- ada && raising token
-                        pcountOfUniqueTokensWithOverlap raisingCs oF.value #== 2
-                      ]
-              )
-            # txOutputs
-        , pcountOfUniqueTokens # vesting.value #== 2
-        , pvalueOf # poolOutputF.value # projectCs # projectTn #== pvalueOf # ownInputValue # projectCs # projectTn
-        , pvalueOf # poolOutputF.value # raisingCs # raisingTn #== owedToPool
-        , correctPool
-        , pdnothing #== pfield @"stakingCredential" # poolOutputF.address
-        , vestingDatumF.beneficiary #== owner
-        , vestingDatumF.vestingSymbol #== poolCs
-        , vestingDatumF.vestingToken #== plpShareTn
-        , vestingDatumF.totalVestingQty #== userGivenShares
-        , vestingDatumF.vestingPeriodStart #== vestingPeriodStartTime
-        , vestingDatumF.vestingPeriodEnd #== vestingPeriodStartTime + vestingPeriodDuration
-        , vestingDatumF.firstUnlockPossibleAfter #== vestingPeriodStartTime + vestingPeriodDurationToFirstUnlock
-        , vestingDatumF.totalInstallments #== vestingPeriodInstallments
-        ]
+    pure . ptraceIfFalse "J30" . pand'List $
+      [ -- The factory and the tokens holder
+        ptraceIfFalse "J31" $ pcountAllScriptInputs # txInputs #== 2
+      , -- The factory is there
+        ptraceIfFalse "J32" $ pcountScriptInputs # factoryValidatorHash # txInputs #== 1
+      , -- The vesting has ada and shares
+        ptraceIfFalse "J33" $ pcountOfUniqueTokens # vesting.value #== 2
+      , -- The pool receives all project tokens, ensures the pool assets are correct as the factory checks token count
+        ptraceIfFalse "J34" $ pvalueOf # poolOutputF.value # projectCs # projectTn #== pvalueOf # ownInputValue # projectCs # projectTn
+      , -- The pool receives all raising tokens, ensures the pool assets are correct as the factory checks token count
+        ptraceIfFalse "J35" $ pvalueOf # poolOutputF.value # raisingCs # raisingTn #== numRaised
+      , -- The pool staking part is set to nothing
+        ptraceIfFalse "J36" $ pdnothing #== pfield @"stakingCredential" # poolOutputF.address
+      , -- The vesting has correct datum
+        ptraceIfFalse "J37" $ vestingDatumF.beneficiary #== owner
+      , ptraceIfFalse "J38" $ vestingDatumF.vestingSymbol #== poolCs
+      , ptraceIfFalse "J39" $ vestingDatumF.vestingToken #== plpShareTn
+      , ptraceIfFalse "J40" $ vestingDatumF.totalVestingQty #== userGivenShares
+      , ptraceIfFalse "J41" $ vestingDatumF.vestingPeriodStart #== vestingPeriodStartTime
+      , ptraceIfFalse "J42" $ vestingDatumF.vestingPeriodEnd #== vestingPeriodStartTime + vestingPeriodDuration
+      , ptraceIfFalse "J43" $ vestingDatumF.firstUnlockPossibleAfter #== vestingPeriodStartTime + vestingPeriodDurationToFirstUnlock
+      , ptraceIfFalse "J44" $ vestingDatumF.totalInstallments #== vestingPeriodInstallments
+      ]
 
 projectTokensHolderValidator :: Term s (PTokensHolderFinalConfig :--> PValidator)
-projectTokensHolderValidator = phoistAcyclic $ plam $ \cfg _dat redm' context -> unTermCont do
-  (_dat, _) <- ptryFromC @(PAsData PUnit) _dat
-  (redm, _) <- ptryFromC @(PAsData PTokenHolderRedeemerFinal) redm'
-  pure $ popaque $ projectTokensHolderValidatorTyped # cfg # pfromData redm # context
+projectTokensHolderValidator = plam $ \cfg dat' redm' context -> unTermCont do
+  (dat, _) <- ptryFromC @(PAsData PDex) dat'
+  (redm, _) <- ptryFromC @(PAsData PTokensHolderFinalRedeemer) redm'
+  pure . popaque $ perrorIfFalse #$ projectTokensHolderValidatorTyped cfg (pfromData dat) (pfromData redm) context
 
 projectTokensHolderScriptValidator :: TokensHolderFinalConfig -> Script
 projectTokensHolderScriptValidator cfg = toScript (projectTokensHolderValidator # pconstant cfg)

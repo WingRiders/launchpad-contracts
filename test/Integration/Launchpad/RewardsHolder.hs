@@ -3,10 +3,9 @@ module Integration.Launchpad.RewardsHolder where
 import Data.Foldable (foldl')
 import Data.Functor (void)
 import Integration.Launchpad.Validators
-import Integration.Mock (LaunchpadConfig (LaunchpadConfig, projectToken, raisingToken), rewardsHolderOilAdaAmount)
+import Integration.Mock (LaunchpadConfig (LaunchpadConfig, projectToken, raisingToken), oilAdaAmount)
 import Launchpad.Types (
   NodeKey,
-  PoolProofDatum (PoolProofDatum),
   RewardsHolderDatum (..),
  )
 import Plutus.Model
@@ -45,7 +44,7 @@ createRewardsHolder action config@LaunchpadConfig {projectToken, raisingToken} r
           , raisingSymbol = raisingCs
           , raisingToken = raisingTn
           }
-  let value = rewardValue <> assetClassValue adaAssetClass rewardsHolderOilAdaAmount
+  let value = rewardValue <> assetClassValue adaAssetClass oilAdaAmount
   usp <- spend wallet value
   tx <- signTx wallet $ createRewardsHolderTx config datum usp value
   void $ sendTx tx
@@ -64,15 +63,23 @@ spendRewardsHolder :: MaliciousRewardsHolderAction -> LaunchpadConfig -> PubKeyH
 spendRewardsHolder action config wallet = do
   rewardsHolderUtxos <- boxAt (rewardsHolderValidator config)
   let holderBoxes = findHolderBoxes wallet rewardsHolderUtxos
-  [(proofRef, _)] <- utxoAt (poolProofValidator config)
 
+  poolProofs <- utxoAt (poolProofValidator config)
+
+  range <- currentTimeRad 1_000
   tx <- case action of
-    NoOwnerSignature -> signTx maliciousPkh $ spendRewardsHolderTx action config proofRef holderBoxes wallet
-    _ -> signTx wallet $ spendRewardsHolderTx action config proofRef holderBoxes wallet
+    NoOwnerSignature -> signTx maliciousPkh =<< validateIn range (spendRewardsHolderTx action config poolProofs holderBoxes wallet)
+    _ -> signTx wallet =<< validateIn range (spendRewardsHolderTx action config poolProofs holderBoxes wallet)
   void $ sendTx tx
 
-spendRewardsHolderTx :: MaliciousRewardsHolderAction -> LaunchpadConfig -> TxOutRef -> [TxBox (TypedValidator RewardsHolderDatum ())] -> PubKeyHash -> Tx
-spendRewardsHolderTx action config@LaunchpadConfig {projectToken, raisingToken} poolProofUtxo holderBoxes wallet =
+spendRewardsHolderTx ::
+  MaliciousRewardsHolderAction ->
+  LaunchpadConfig ->
+  [(TxOutRef, TxOut)] ->
+  [TxBox (TypedValidator RewardsHolderDatum ())] ->
+  PubKeyHash ->
+  Tx
+spendRewardsHolderTx action config poolProofs holderBoxes wallet =
   mconcat $
     map
       (spendBox (rewardsHolderValidator config) ())
@@ -80,10 +87,7 @@ spendRewardsHolderTx action config@LaunchpadConfig {projectToken, raisingToken} 
       <> [ payToKey wallet rewardValue
          , case action of
             NoPoolProof -> mempty
-            _ -> refInputHash poolProofUtxo poolProofDatum
+            _ -> mconcat . map (\(ref, out) -> refInputHash ref (txOutDatum out)) $ poolProofs
          ]
   where
-    poolProofDatum = PoolProofDatum projectCs projectTn raisingCs raisingTn
-    AssetClass (projectCs, projectTn) = projectToken
-    AssetClass (raisingCs, raisingTn) = raisingToken
     rewardValue = foldl' (\acc txBox -> (acc <> txBoxValue txBox)) mempty holderBoxes

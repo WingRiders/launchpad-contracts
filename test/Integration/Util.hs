@@ -6,7 +6,7 @@ import Cardano.Simple.Ledger.Tx qualified as Tx
 import Data.List (find)
 import Data.Maybe
 import GHC.Stack (HasCallStack)
-import Integration.Mock (LaunchpadConfig (..), mockWrPoolCurrencySymbol)
+import Integration.Mock (LaunchpadConfig (..), mockSundaeSettingsCurrencySymbol, mockWrPoolCurrencySymbol)
 import Launchpad.CommitFold qualified as C
 import Launchpad.Constants qualified as C
 import Launchpad.FailProof qualified as FP
@@ -28,6 +28,7 @@ import Plutarch.Extra.ScriptContext (scriptHashToTokenName)
 
 import Plutus.Model
 
+import Launchpad.Constants (settingsNftName)
 import PlutusLedgerApi.V1.Address (toPubKeyHash)
 import PlutusLedgerApi.V1.Value (AssetClass (..), CurrencySymbol (..), TokenName (..), assetClass, assetClassValue)
 import PlutusLedgerApi.V1.Value qualified as V
@@ -55,13 +56,14 @@ import Test.Util (
   vSOL,
   vUSDT,
  )
+import Unit.Launchpad.UtilFunctions (unwrapScriptHash)
 import Prelude
 
-ensureTx :: HasCallStack => PubKeyHash -> Tx -> Run ()
+ensureTx :: PubKeyHash -> Tx -> Run ()
 ensureTx submitter tx =
   signTx submitter tx >>= sendTx >>= \case
     Right _ -> pure ()
-    Left e -> error $ show e
+    Left e -> fail $ show e
 
 data AddToken = AddToken | SkipToken
 
@@ -92,8 +94,8 @@ memptyIf p b f = if p b then mempty else f b
 memptyIfZero :: Value -> Value
 memptyIfZero value = memptyIf V.isZero value id
 
-shareTokenName :: AssetClass -> AssetClass -> TokenName
-shareTokenName assetA assetB =
+wrShareTokenName :: AssetClass -> AssetClass -> TokenName
+wrShareTokenName assetA assetB =
   TokenName . blake2b_256 $
     blake2b_256 "0"
       <> blake2b_256 (encodeUtf8 "1")
@@ -107,18 +109,32 @@ shareTokenName assetA assetB =
 addressToPubKeyHash :: Address -> PubKeyHash
 addressToPubKeyHash addr = fromJust $ toPubKeyHash addr
 
+-- https://github.com/SundaeSwap-finance/sundae-contracts/blob/be33466b7dbe0f8e6c0e0f46ff23737897f45835/lib/shared.ak#L222
+poolSundaeNftName :: BuiltinByteString -> TokenName
+poolSundaeNftName identifier = TokenName $ "000de140" <> identifier
+
+-- https://github.com/SundaeSwap-finance/sundae-contracts/blob/be33466b7dbe0f8e6c0e0f46ff23737897f45835/lib/shared.ak#L228
+poolSundaeLpName :: BuiltinByteString -> TokenName
+poolSundaeLpName identifier = TokenName $ "0014df10" <> identifier
+
+mockSundaeIdentifier :: BuiltinByteString
+mockSundaeIdentifier = "AAAFFF"
+
 good :: LaunchpadConfig -> String -> (LaunchpadConfig -> Run a) -> TestTree
 good config msg t =
   testNoErrors
     ( adaValue 100_000_000_000_000
+        <> singleton mockSundaeSettingsCurrencySymbol settingsNftName 1
         <> assetClassValue vBTC 100_000_000_000_000
         <> assetClassValue vETH 100_000_000_000_000
         <> assetClassValue vSOL 100_000_000_000_000
         <> assetClassValue vADA 100_000_000_000_000
         <> assetClassValue vUSDT 100_000_000_000_000
         <> assetClassValue vDOGE 100_000_000_000_000
+        <> singleton (CurrencySymbol (unwrapScriptHash config.sundaePoolScriptHash)) (poolSundaeLpName mockSundaeIdentifier) 1_000_000
+        <> singleton (CurrencySymbol (unwrapScriptHash config.sundaePoolScriptHash)) (poolSundaeNftName mockSundaeIdentifier) 1
         <> assetClassValue (assetClass mockWrPoolCurrencySymbol "lpShare") 1_000
-        <> assetClassValue (assetClass mockWrPoolCurrencySymbol C.lpValidityTokenName) 1
+        <> assetClassValue (assetClass mockWrPoolCurrencySymbol C.wrLpValidityTokenName) 1
         -- ProjectTokensHolder Validity Token (in the Admin wallet [getMainUser])
         <> assetClassValue (assetClass (PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig config)) (scriptHashToTokenName (PTHFirst.projectTokensHolderScriptValidatorHash (firstTokensHolderConfig config)))) 1
         <> assetClassValue
@@ -209,7 +225,7 @@ nodeConfig lCfg@LaunchpadConfig {..} =
     , projectToken = pToken
     , collateral
     , nodeAda
-    , foldOilAda
+    , oilAda
     , commitFoldFeeAda
     }
   where
@@ -260,8 +276,15 @@ rewardsFoldConfig lCfg =
     , presaleTierCs = lCfg.presaleTierCs
     , tokensToDistribute = lCfg.tokensToDistribute
     , withdrawalEndTime = lCfg.withdrawalEndTime
-    , rewardsHolderOilAda = lCfg.rewardsHolderOilAda
+    , oilAda = lCfg.oilAda
     , commitFoldFeeAda = lCfg.commitFoldFeeAda
+    , splitBps = lCfg.splitBps
+    , owner = lCfg.owner
+    , daoFeeNumerator = lCfg.daoFeeNumerator
+    , daoFeeDenominator = lCfg.daoFeeDenominator
+    , daoFeeReceiver = lCfg.daoFeeReceiver
+    , collateral = lCfg.collateral
+    , raisedTokensPoolPartPercentage = lCfg.raisedTokensPoolPartPercentage
     }
 
 rewardsFoldPolicyConfig :: LaunchpadConfig -> R.RewardsFoldPolicyConfig
@@ -296,14 +319,12 @@ finalTokensHolderConfig lCfg =
   PTHF.TokensHolderFinalConfig
     { starter = lCfg.starter
     , owner = lCfg.owner
-    , daoFeeUnits = lCfg.daoFeeUnits
-    , daoFeeBase = lCfg.daoFeeBase
-    , tokensToDistribute = lCfg.tokensToDistribute
-    , raisedTokensPoolPartPercentage = lCfg.raisedTokensPoolPartPercentage
-    , totalTokens = lCfg.totalTokens
-    , poolSymbol = lCfg.wrPoolCurrencySymbol
-    , poolValidatorHash = lCfg.wrPoolValidatorHash
-    , factoryValidatorHash = lCfg.wrFactoryValidatorHash
+    , wrPoolSymbol = lCfg.wrPoolCurrencySymbol
+    , wrPoolValidatorHash = lCfg.wrPoolValidatorHash
+    , wrFactoryValidatorHash = lCfg.wrFactoryValidatorHash
+    , sundaePoolScriptHash = lCfg.sundaePoolScriptHash
+    , sundaeFeeTolerance = lCfg.sundaeFeeTolerance
+    , sundaeSettingsCurrencySymbol = lCfg.sundaeSettingsCurrencySymbol
     , vestingValidatorHash = lCfg.vestingValidatorHash
     , vestingPeriodDuration = lCfg.vestingPeriodDuration
     , vestingPeriodDurationToFirstUnlock = lCfg.vestingPeriodDurationToFirstUnlock
@@ -315,14 +336,14 @@ finalTokensHolderConfig lCfg =
     , projectSymbol = fst (unAssetClass lCfg.projectToken)
     , projectToken = snd (unAssetClass lCfg.projectToken)
     , poolProofValidatorHash = poolProofScriptValidatorHash (poolProofConfig lCfg)
-    , collateral = lCfg.collateral
     }
 
 poolProofPolicyConfig :: LaunchpadConfig -> PoolProofPolicyConfig
 poolProofPolicyConfig lCfg =
   PoolProofPolicyConfig
-    { poolValidatorHash = lCfg.wrPoolValidatorHash
-    , poolSymbol = lCfg.wrPoolCurrencySymbol
+    { wrPoolValidatorHash = lCfg.wrPoolValidatorHash
+    , wrPoolSymbol = lCfg.wrPoolCurrencySymbol
+    , sundaePoolScriptHash = lCfg.sundaePoolScriptHash
     }
 
 poolProofConfig :: LaunchpadConfig -> PoolProofConfig
@@ -333,4 +354,7 @@ rewardsHolderConfig lCfg =
   RH.RewardsHolderConfig
     { poolProofValidatorHash = poolProofScriptValidatorHash (poolProofConfig lCfg)
     , poolProofSymbol = poolProofMintingPolicySymbol (poolProofPolicyConfig lCfg)
+    , usesWr = lCfg.splitBps > 0
+    , usesSundae = lCfg.splitBps < 10_000
+    , withdrawalEndTime = lCfg.withdrawalEndTime
     }

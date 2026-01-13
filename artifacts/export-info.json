@@ -19,8 +19,8 @@
     },
     {
       "name": "pool-proof-policy",
-      "size": 2682,
-      "symbol": "df262a3241dc766c9b95630ab867650beb9fb0188eb1e1d9fad4b6b4"
+      "size": 4345,
+      "symbol": "804cb1413e803c57a226ab6f991428c2ea58ec324e5f23af5f913e54"
     },
     {
       "name": "project-tokens-holder-policy",
@@ -70,9 +70,9 @@
       "size": 7
     },
     {
-      "hash": "5aa27397ae0e822a1d1c1bf25c3de3cf5429c5c3ce11b7c086c8d75e",
+      "hash": "99eeb6cb13300a45b800089b60e68d0fdac4c9094299996fba34dc1a",
       "name": "project-tokens-holder-final",
-      "size": 5718
+      "size": 6190
     },
     {
       "hash": "67d322de99a3815c99e7eb74bfbacab081ed7f9720bdf9447f0ccb79",
@@ -80,14 +80,14 @@
       "size": 1440
     },
     {
-      "hash": "70a86b960b8958d35fa9464de33160311c7d34c9346c4edc9a580322",
+      "hash": "7c9be17839979aa6aa39aade134d56346b76053911cd66da59ee0ed1",
       "name": "rewards-fold",
-      "size": 7670
+      "size": 9105
     },
     {
-      "hash": "a8139c09649fc6644330eedd317d23ef4245df15620369410eaa50fd",
+      "hash": "8bbe6ee30257c6d13e004cf948d14fd6f9ab49a8e6fe8f4198a5c174",
       "name": "rewards-holder",
-      "size": 1072
+      "size": 1397
     },
     {
       "hash": "51936f3c98a04b6609aa9b5c832ba1182cf43a58e534fcc05db09d69",
@@ -95,14 +95,14 @@
       "size": 7
     },
     {
-      "hash": "f94ee84307326935a04599988b803a1b20a98c80ea929b9079ec558f",
+      "hash": "6eb05cf724032b747c429286e198f932d0bf1c045d9d93e601171d87",
       "name": "ref-script-carrier",
-      "size": 339
+      "size": 334
     },
     {
-      "hash": "aff3a83f6e89ece6c22e88d970d7bdd8fd603dd5dc53ff2871599e9a",
+      "hash": "103ef6ddf248cbb5c15ec28575744ebc79a73f4182475ec00ee91b45",
       "name": "vesting",
-      "size": 1091
+      "size": 2477
     }
   ]
 }

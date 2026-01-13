@@ -100,3 +100,11 @@ pisCorrectPool (projectSymbol, projectToken) (raisingSymbol, raisingToken) (asse
         , projectSymbol #== assetBSymbol
         , projectToken #== assetBToken
         ]
+
+-- https://github.com/SundaeSwap-finance/sundae-contracts/blob/be33466b7dbe0f8e6c0e0f46ff23737897f45835/lib/shared.ak#L222
+poolSundaeNftName :: Term s PByteString -> Term s PTokenName
+poolSundaeNftName identifier = pcon . PTokenName $ (pconstant @PByteString "000de140") <> identifier
+
+-- https://github.com/SundaeSwap-finance/sundae-contracts/blob/be33466b7dbe0f8e6c0e0f46ff23737897f45835/lib/shared.ak#L228
+poolSundaeLpName :: Term s PByteString -> Term s PTokenName
+poolSundaeLpName identifier = pcon . PTokenName $ (pconstant @PByteString "0014df10") <> identifier

@@ -1,11 +1,15 @@
+{-# LANGUAGE BlockArguments #-}
+
 module Integration.Launchpad.RewardsHolderTest where
 
+import Control.Monad (when)
 import Integration.Launchpad.PoolProof
 import Integration.Launchpad.PoolProof qualified as PP
 import Integration.Launchpad.RewardsHolder (MaliciousRewardsHolderAction (..), createRewardsHolder, spendRewardsHolder)
 import Integration.Launchpad.RewardsHolder qualified as RH
 import Integration.Mock
 import Integration.Util
+import Launchpad.Types (Dex (..))
 import Plutus.Model
 import PlutusLedgerApi.V1.Value (assetClassValue)
 import PlutusLedgerApi.V2 (Value)
@@ -37,7 +41,13 @@ spend_rewards_holder :: MaliciousRewardsHolderAction -> Integer -> Value -> Laun
 spend_rewards_holder action n val config = do
   Wallets {..} <- setupWallets config
 
-  createWrPoolUTxO PP.None config poolWrInitWallet
-  createPoolProof PP.None config userWallet2
+  when (config.splitBps > 0) do
+    createPoolUtxo PP.None Wr config poolInitWallet
+    createPoolProof PP.None Wr config userWallet2
+
+  when (config.splitBps < 10_000) do
+    createPoolUtxo PP.None Sundae config poolInitWallet
+    createPoolProof PP.None Sundae config userWallet2
+
   mapM_ (\i -> createRewardsHolder action config val (unwrapPubKeyHash userWallet1, i) launchpadOwner) [1 .. n]
   spendRewardsHolder action config userWallet1

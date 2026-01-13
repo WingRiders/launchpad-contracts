@@ -2,17 +2,18 @@
 
 module Launchpad.RewardsHolder where
 
+import Launchpad.Constants
 import Launchpad.Types
 import Plutarch
 import Plutarch.Api.V2
 import Plutarch.Bool
 import Plutarch.DataRepr
-import Plutarch.Extra.ScriptContext (pfromOutputDatum, ptxSignedBy)
+import Plutarch.Extra.ScriptContext
 import Plutarch.Extra.TermCont
 import Plutarch.Lift
-import Plutarch.Maybe
 import Plutarch.PlutusScript
 import Plutarch.Prelude
+import Plutarch.Types.Base
 import Plutarch.Util
 import Plutus.Util
 import PlutusLedgerApi.V2
@@ -28,6 +29,9 @@ import PlutusTx qualified
 data RewardsHolderConfig = RewardsHolderConfig
   { poolProofValidatorHash :: ScriptHash
   , poolProofSymbol :: CurrencySymbol
+  , usesWr :: Bool
+  , usesSundae :: Bool
+  , withdrawalEndTime :: POSIXTime
   }
   deriving stock (Generic)
 
@@ -41,6 +45,9 @@ data PRewardsHolderConfig (s :: S)
           ( PDataRecord
               [ "poolProofValidatorHash" ':= PScriptHash
               , "poolProofSymbol" ':= PCurrencySymbol
+              , "usesWr" ':= PBool
+              , "usesSundae" ':= PBool
+              , "withdrawalEndTime" ':= PPOSIXTime
               ]
           )
       )
@@ -60,43 +67,82 @@ deriving via
 
 {- | This validates spending of a RewardsHolder eUTxO.
      In order to transaction be valid:
-      1. The transaction has a PoolProof eUTxO with a PoolProof token in the reference inputs, the token name must be equal to the PoolProof validator hash
-      2. The transaction is signed by the PubKeyHash stored in the first part of the node key from the rewards holder utxo datum
-      3. The pool proof must have the same asset classes in the datum as the rewards utxo
+      1. The transaction is signed by the PubKeyHash stored in the first part of the node key from the rewards holder utxo datum
+      if usesWrV2 is true:
+        2. The transaction has a PoolProof utxo with a PoolProof token in the reference inputs, the token name must be equal to the PoolProof validator hash
+        3. The pool proof must have the same asset classes in the datum as the rewards utxo
+        4. The pool proof has WR dex field
+      if usesSundaeV3 is true:
+        5. The transaction has a PoolProof utxo with a PoolProof token in the reference inputs, the token name must be equal to the PoolProof validator hash
+        6. The pool proof must have the same asset classes in the datum as the rewards utxo
+        7. The pool proof has Sundae dex field
+      the validation requires AT LEAST one proof to be present, not both
+
+     In case the pool creation is stalled for whatever reason, the rewards are unlocked once sufficient time has passed since the end of the withdrawal period.
 -}
-prewardsHolderValidator :: Term s (PRewardsHolderConfig :--> PRewardsHolderDatum :--> PScriptContext :--> PBool)
-prewardsHolderValidator = phoistAcyclic $ plam \cfg datum context -> unTermCont do
-  cfgF <- pletFieldsC @'["poolProofValidatorHash", "poolProofSymbol"] cfg
+prewardsHolderValidator :: Term s PRewardsHolderConfig -> Term s PRewardsHolderDatum -> Term s PScriptContext -> Term s PBool
+prewardsHolderValidator cfg datum context = unTermCont do
+  cfgF <-
+    pletFieldsC
+      @'[ "poolProofValidatorHash"
+        , "poolProofSymbol"
+        , "usesWr"
+        , "usesSundae"
+        , "withdrawalEndTime"
+        ]
+      cfg
   contextFields <- pletFieldsC @'["txInfo"] context
-  txInfoFields <- pletFieldsC @'["referenceInputs", "signatories", "datums"] contextFields.txInfo
+  tx <- pletFieldsC @'["referenceInputs", "signatories", "datums", "validRange"] contextFields.txInfo
+  datumF <-
+    pletFieldsC
+      @'[ "owner"
+        , "projectSymbol"
+        , "projectToken"
+        , "raisingSymbol"
+        , "raisingToken"
+        ]
+      datum
 
-  datumF <- pletFieldsC @'["owner", "projectSymbol", "projectToken", "raisingSymbol", "raisingToken"] datum
+  PTimestamps lowerTime _ <- pmatchC (pfiniteTxValidityRangeTimestamps # tx.validRange)
 
-  let poolProofRefInput = ptryUniqueScriptTxInInfo cfgF.poolProofValidatorHash txInfoFields.referenceInputs
-      signedByOwner = ptxSignedBy # txInfoFields.signatories # pdata (pcon (PPubKeyHash (pfromData (pfstBuiltin # (pfromData (datumF.owner))))))
+  let hasCorrectPoolProof dex =
+        pany
+          # plam
+            ( \o -> plet (ptxInInfoResolved # o) \poolProof ->
+                (ppaysToCredential # cfgF.poolProofValidatorHash # poolProof)
+                  #&& unTermCont do
+                    poolProofDatum <-
+                      pletFieldsC @'["projectSymbol", "projectToken", "raisingSymbol", "raisingToken", "dex"] $
+                        pfromPDatum @PPoolProofDatum #$ ptryFromInlineDatum #$ ptxOutDatum # poolProof
+                    pure $
+                      pand'List
+                        [ ptraceIfFalse "M1" (ptxOutHasAssociatedToken cfgF.poolProofSymbol poolProof)
+                        , ptraceIfFalse "M2" $ datumF.projectSymbol #== poolProofDatum.projectSymbol
+                        , ptraceIfFalse "M3" $ datumF.projectToken #== poolProofDatum.projectToken
+                        , ptraceIfFalse "M4" $ datumF.raisingSymbol #== poolProofDatum.raisingSymbol
+                        , ptraceIfFalse "M5" $ datumF.raisingToken #== poolProofDatum.raisingToken
+                        , ptraceIfFalse "M6" $ poolProofDatum.dex #== dex
+                        ]
+            )
+          # tx.referenceInputs
 
-  poolProofOut <- pletC (ptxInInfoResolved # poolProofRefInput)
-  poolProofDatum <-
-    pletFieldsC @'["projectSymbol", "projectToken", "raisingSymbol", "raisingToken"]
-      (pfromJust # (pfromOutputDatum @PPoolProofDatum # (ptxOutDatum # poolProofOut) # txInfoFields.datums))
+  let signedByOwner =
+        ptxSignedBy
+          # tx.signatories
+          # pdata (pcon . PPubKeyHash . pfromData $ pfstBuiltin # pfromData datumF.owner)
 
   pure $
     pand'List
-      [ ptraceIfFalse "M1" (ptxOutHasAssociatedToken cfgF.poolProofSymbol poolProofOut)
-      , ptraceIfFalse "M2" signedByOwner
-      , ptraceIfFalse "M3" $
-          pand'List
-            [ ptraceIfFalse "M4" $ datumF.projectSymbol #== poolProofDatum.projectSymbol
-            , ptraceIfFalse "M5" $ datumF.projectToken #== poolProofDatum.projectToken
-            , ptraceIfFalse "M6" $ datumF.raisingSymbol #== poolProofDatum.raisingSymbol
-            , ptraceIfFalse "M7" $ datumF.raisingToken #== poolProofDatum.raisingToken
-            ]
+      [ ptraceIfFalse "M7" signedByOwner
+      , (pto (lowerTime - cfgF.withdrawalEndTime) #> pconstant emergencyWithdrawalPeriod)
+          #|| (pif cfgF.usesWr (ptraceIfFalse "M8" $ hasCorrectPoolProof (pcon PWr)) pfalse)
+          #|| (pif cfgF.usesSundae (ptraceIfFalse "M9" $ hasCorrectPoolProof (pcon PSundae)) pfalse)
       ]
 
 rewardsHolderValidator :: Term s (PRewardsHolderConfig :--> PValidator)
-rewardsHolderValidator = phoistAcyclic $ plam \cfg rawDatum _redeemer context ->
+rewardsHolderValidator = plam \cfg rawDatum _redeemer context ->
   let datum = ptryFrom @PRewardsHolderDatum rawDatum fst
-   in popaque $ perrorIfFalse #$ ptraceIfFalse "M0" $ prewardsHolderValidator # cfg # datum # context
+   in popaque $ perrorIfFalse #$ prewardsHolderValidator cfg datum context
 
 rewardsHolderScriptValidator :: RewardsHolderConfig -> Script
 rewardsHolderScriptValidator cfg = toScript (rewardsHolderValidator # pconstant cfg)

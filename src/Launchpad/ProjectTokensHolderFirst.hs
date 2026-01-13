@@ -91,7 +91,7 @@ pvalidateLaunchpadCancellation owner startTime holderCs selfValidatorHash signat
     pand'List
       [ ptraceIfFalse "K1" $ ptxSignedBy # signatories # (paddressPubKeyCredential # owner)
       , ptraceIfFalse "K2" $ upper #< startTime
-      , ptraceIfFalse "K3" $ pvalueOf # mint # holderCs # pscriptHashToTokenName selfValidatorHash #== (-1)
+      , ptraceIfFalse "K3" $ pvalueOf # mint # holderCs # pscriptHashToTokenName selfValidatorHash #== -1
       ]
 
 pnodeWithRewardsOrFailurePresent ::
@@ -154,6 +154,7 @@ projectTokensHolderFirstValidator cfg datum redeemer context = unTermCont do
   selfValidatorHash <- pletC (pgetValidatorHashFromScriptAddress #$ ptxOutAddress # ownInput)
   let nodeScriptHash = pfromData (pto datum)
   PTimestamps lower _ <- pmatchC (pfiniteTxValidityRangeTimestamps # tx.validRange)
+
   pure $
     pand'List
       [ ptxOutHasAssociatedToken holderCs ownInput

@@ -49,14 +49,12 @@ fixedSupplyCurrencySymbol :: TxOutRef -> CurrencySymbol
 fixedSupplyCurrencySymbol oref = CurrencySymbol $ getScriptHash $ scriptHash (fixedSupplyPolicy oref)
 
 pfixedSupplyMintingPolicy :: Term s (PTxOutRef :--> PMintingPolicy)
-pfixedSupplyMintingPolicy = plam $ \oref _rawRedeemer ctx -> popaque $ pvalidateFixedSupply # oref # ctx
+pfixedSupplyMintingPolicy = plam $ \oref _rawRedeemer ctx -> popaque $ pvalidateFixedSupply oref ctx
 
-pvalidateFixedSupply :: Term s (PTxOutRef :--> PScriptContext :--> PUnit)
-pvalidateFixedSupply = plam $ \oref ctx -> perrorIfFalse #$ unTermCont $ do
+pvalidateFixedSupply :: Term s PTxOutRef -> Term s PScriptContext -> Term s PUnit
+pvalidateFixedSupply oref ctx = perrorIfFalse #$ unTermCont $ do
   context <- pletFieldsC @'["txInfo", "purpose"] ctx
-
   let utxoSpent = pisJust #$ pfindTxInByTxOutRef # oref # context.txInfo
-
   pure (ptraceIfFalse "UTxO not spent" utxoSpent)
 
 pfindTxInByTxOutRef :: Term s (PTxOutRef :--> PTxInfo :--> PMaybe PTxInInfo)

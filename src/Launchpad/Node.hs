@@ -24,7 +24,7 @@ import PlutusTx qualified
 
 {- | Parameters of the Node Validator
 
-     "nodeAda" should be equal to (commitFoldFeeAda + rewardsFoldFeeAda + rewardsHolderOilAda)
+     "oilAda" should be equal to (commitFoldFeeAda + rewardsFoldFeeAda + oilAda)
 
      The correctness of the values that parametrize the script is checked on the backend.
      For increased transparency, there are specific values of the individual parameters listed in the transaction metadata.
@@ -66,7 +66,7 @@ data NodeConfig = NodeConfig
   , daoFeeReceiver :: Address
   , collateral :: Integer
   , nodeAda :: Integer
-  , foldOilAda :: Integer
+  , oilAda :: Integer
   , commitFoldFeeAda :: Integer
   }
   deriving (Generic)
@@ -111,7 +111,7 @@ data PNodeConfig (s :: S)
               , "daoFeeReceiver" ':= PAddress
               , "collateral" ':= PInteger
               , "nodeAda" ':= PInteger
-              , "foldOilAda" ':= PInteger
+              , "oilAda" ':= PInteger
               , "commitFoldFeeAda" ':= PInteger
               ]
           )
@@ -544,7 +544,7 @@ pcheckSeparatorNode =
   - nodeScriptHash field of R 0,1 is equal to the script hash of the list element validator
   - next field of R 0,1 is equal to the next field of A
   - commitFoldOwner field of R 0,1 is equal to the owner field of K
-  - there is at least foldOilAda ADA deposited in the rewards fold utxo
+  - there is at least oilAda ADA deposited in the rewards fold utxo
   - R 0,1 holds 2 unique tokens, ADA and rewards fold token
   - when the cutoffTime field of K is Nothing, the committed field of K is smaller than the max commitment of the launchpad config
   - when the cutoffTime field of K is a Just value, the committed field of K is equal to the max commitment of the launchpad config
@@ -571,7 +571,7 @@ pvalidateStartRewardsFold ::
 pvalidateStartRewardsFold
   minCommitment
   maxCommitment
-  foldOilAda
+  oilAda
   nodeCs
   selfValidatorHash
   commitFoldCs
@@ -609,28 +609,28 @@ pvalidateStartRewardsFold
 
     pure $
       pand'List
-        [ ptraceIfFalse "H70" $ pisDNothing # nodeD.key
-        , ptraceIfFalse "H71" $ pisDJust # nodeD.next
-        , ptraceIfFalse "H72" $ pvalueOf # mint # nodeCs # pscriptHashToTokenName selfValidatorHash #== (-1)
-        , ptraceIfFalse "H73" $ pvalueOf # mint # commitFoldCs # pscriptHashToTokenName commitFoldValidatorHash #== (-1)
-        , ptraceIfFalse "H74" $ pvalueOf # rewardsFoldF.value # padaSymbol # padaToken #>= foldOilAda
-        , ptraceIfFalse "H75" $ pcountOfUniqueTokens # rewardsFoldF.value #== 2
-        , ptraceIfFalse "H58" $ rewardsFoldD.committed #== commitFoldD.committed
-        , ptraceIfFalse "H59" $ rewardsFoldD.overcommitted #== commitFoldD.overcommitted
-        , ptraceIfFalse "H60" $ rewardsFoldD.cutoffKey #== commitFoldD.cutoffKey
-        , ptraceIfFalse "H61" $ rewardsFoldD.cutoffTime #== commitFoldD.cutoffTime
-        , ptraceIfFalse "H62" $ rewardsFoldD.commitFoldOwner #== commitFoldD.owner
-        , ptraceIfFalse "H63" $ rewardsFoldD.next #== nodeD.next
-        , ptraceIfFalse "H64" $ rewardsFoldD.nodeScriptHash #== selfValidatorHash
+        [ ptraceIfFalse "H58" $ pisDNothing # nodeD.key
+        , ptraceIfFalse "H59" $ pisDJust # nodeD.next
+        , ptraceIfFalse "H60" $ pvalueOf # mint # nodeCs # pscriptHashToTokenName selfValidatorHash #== (-1)
+        , ptraceIfFalse "H61" $ pvalueOf # mint # commitFoldCs # pscriptHashToTokenName commitFoldValidatorHash #== (-1)
+        , ptraceIfFalse "H62" $ pvalueOf # rewardsFoldF.value # padaSymbol # padaToken #>= oilAda
+        , ptraceIfFalse "H63" $ pcountOfUniqueTokens # rewardsFoldF.value #== 2
+        , ptraceIfFalse "H64" $ rewardsFoldD.committed #== commitFoldD.committed
+        , ptraceIfFalse "H65" $ rewardsFoldD.overcommitted #== commitFoldD.overcommitted
+        , ptraceIfFalse "H66" $ rewardsFoldD.cutoffKey #== commitFoldD.cutoffKey
+        , ptraceIfFalse "H67" $ rewardsFoldD.cutoffTime #== commitFoldD.cutoffTime
+        , ptraceIfFalse "H68" $ rewardsFoldD.commitFoldOwner #== commitFoldD.owner
+        , ptraceIfFalse "H69" $ rewardsFoldD.next #== nodeD.next
+        , ptraceIfFalse "H70" $ rewardsFoldD.nodeScriptHash #== selfValidatorHash
         , pmatch rewardsFoldD.cutoffTime \case
-            PDJust _ -> ptraceIfFalse "H65" $ rewardsFoldD.committed #== maxCommitment
+            PDJust _ -> ptraceIfFalse "H71" $ rewardsFoldD.committed #== maxCommitment
             PDNothing _ ->
               pand'List
-                [ ptraceIfFalse "H66" $ rewardsFoldD.committed #>= minCommitment
-                , ptraceIfFalse "H67" $ rewardsFoldD.committed #< maxCommitment
+                [ ptraceIfFalse "H72" $ rewardsFoldD.committed #>= minCommitment
+                , ptraceIfFalse "H73" $ rewardsFoldD.committed #< maxCommitment
                 ]
-        , ptraceIfFalse "H68" $ commitFoldD.nodeScriptHash #== selfValidatorHash
-        , ptraceIfFalse "H69" $ pisDNothing # commitFoldD.next
+        , ptraceIfFalse "H74" $ commitFoldD.nodeScriptHash #== selfValidatorHash
+        , ptraceIfFalse "H75" $ pisDNothing # commitFoldD.next
         ]
 
 {- | Validate the launchpad failure.
@@ -744,23 +744,23 @@ pvalidateLaunchpadFailure
 
     pure $
       pand'List
-        [ ptraceIfFalse "H79" $ commitFoldD.nodeScriptHash #== selfValidatorHash
-        , ptraceIfFalse "H80" $ pisDNothing # commitFoldD.next
-        , ptraceIfFalse "H81" $ pisDNothing # commitFoldD.cutoffTime
-        , ptraceIfFalse "H82" $ pfromData commitFoldD.committed #< minCommitment
-        , ptraceIfFalse "H90" $ isDaoCompensated daoCollateral
-        , ptraceIfFalse "H91" $ isCommitFoldOwnerCompensated commitFoldCollateral commitFoldD.owner
+        [ ptraceIfFalse "H78" $ commitFoldD.nodeScriptHash #== selfValidatorHash
+        , ptraceIfFalse "H79" $ pisDNothing # commitFoldD.next
+        , ptraceIfFalse "H80" $ pisDNothing # commitFoldD.cutoffTime
+        , ptraceIfFalse "H81" $ pfromData commitFoldD.committed #< minCommitment
+        , ptraceIfFalse "H82" $ isDaoCompensated daoCollateral
+        , ptraceIfFalse "H83" $ isCommitFoldOwnerCompensated commitFoldCollateral commitFoldD.owner
         , -- head node, commit fold, project tokens holder
-          ptraceIfFalse "H78" $ pcountAllScriptInputs # inputs #== 3
-        , ptraceIfFalse "H83" $ pisDNothing # nodeD.key
-        , ptraceIfFalse "H84" $ pvalueOf # mint # nodeCs # pscriptHashToTokenName selfValidatorHash #== (-1)
-        , ptraceIfFalse "H85" $ pvalueOf # mint # commitFoldCs # pscriptHashToTokenName commitFoldValidatorHash #== (-1)
-        , ptraceIfFalse "H86" $ pvalueOf # mint # projectTokensHolderCs # pscriptHashToTokenName projectTokensHolderValidatorHash #== (-1)
-        , ptraceIfFalse "H87" $ pfromData failProofStoredNodeHash #== selfValidatorHash
+          ptraceIfFalse "H84" $ pcountAllScriptInputs # inputs #== 3
+        , ptraceIfFalse "H85" $ pisDNothing # nodeD.key
+        , ptraceIfFalse "H86" $ pvalueOf # mint # nodeCs # pscriptHashToTokenName selfValidatorHash #== (-1)
+        , ptraceIfFalse "H87" $ pvalueOf # mint # commitFoldCs # pscriptHashToTokenName commitFoldValidatorHash #== (-1)
+        , ptraceIfFalse "H88" $ pvalueOf # mint # projectTokensHolderCs # pscriptHashToTokenName projectTokensHolderValidatorHash #== (-1)
+        , ptraceIfFalse "H89" $ pfromData failProofStoredNodeHash #== selfValidatorHash
         , -- ada and fail proof token
-          ptraceIfFalse "H88" $ pcountOfUniqueTokens # failProofF.value #== 2
+          ptraceIfFalse "H90" $ pcountOfUniqueTokens # failProofF.value #== 2
         , -- The owner's project tokens are returned
-          ptraceIfFalse "H89" $
+          ptraceIfFalse "H91" $
             pany
               # plam
                 ( \o -> unTermCont do
@@ -891,7 +891,7 @@ pnodeScriptValidator cfg node redeemer context = unTermCont do
         , "daoFeeReceiver"
         , "collateral"
         , "nodeAda"
-        , "foldOilAda"
+        , "oilAda"
         , "commitFoldFeeAda"
         ]
       cfg
@@ -983,7 +983,7 @@ pnodeScriptValidator cfg node redeemer context = unTermCont do
               pvalidateStartRewardsFold
                 cfgF.projectMinCommitment
                 cfgF.projectMaxCommitment
-                cfgF.foldOilAda
+                cfgF.oilAda
                 nodeCs
                 selfValidatorHash
                 commitFoldCs

@@ -573,7 +573,7 @@ pfoldl2 =
   Folding over inputs and outputs of a transaction.
   We also expect indices of the UTxOs being passed as an argument.
   Each output index yields an output on the index.
-  In case an index is -1, we want to pass PNothing to the state function as the output
+  In case an index is negative, we want to pass PNothing to the state function as the output
   (e.g. in cases we don't produce outputs to corresponding inputs).
 -}
 pfoldInputsWithOutput ::
