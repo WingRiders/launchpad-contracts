@@ -9,8 +9,8 @@
   "policies": [
     {
       "name": "commit-fold-policy",
-      "size": 2278,
-      "symbol": "90c625cbd8bfb8d6ca16f2e47f8d7bb2129d86e4b3bdbd46c7b9e22d"
+      "size": 2274,
+      "symbol": "0ab57b63533ff2bc81c635d8aa9e2389c6bcca3d414950a8446b335d"
     },
     {
       "name": "node-policy",
@@ -60,9 +60,9 @@
       "size": 5351
     },
     {
-      "hash": "daa7e68abf5a31108e73ff750e51feba548261627a0ff91f714cf1ea",
+      "hash": "7e298eb84c2f2b08d2af405cfc251ff63befefca95b62a606ec6fedc",
       "name": "node",
-      "size": 9871
+      "size": 9821
     },
     {
       "hash": "ab2b77feb5b9c1b91f964b528cf0ade8007e2ad0fd0a7e3fce6d9014",
