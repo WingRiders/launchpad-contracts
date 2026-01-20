@@ -65,11 +65,8 @@ data LaunchpadConfig = LaunchpadConfig
   -- ^ The currency symbol of the Sundae settings NFT.
   , startTime :: POSIXTime
   -- ^ The start time must be set to the lowest of the tiers start times.
-  , contributionEndTime :: POSIXTime
-  -- ^ The time after which users no longer can contribute to the launch.
-  , withdrawalEndTime :: POSIXTime
-  -- ^ The time after which users no longer can withdraw from the launch.
-  -- the withdrawalEndTime must be after the contributionEndTime
+  , endTime :: POSIXTime
+  -- ^ The time after which users no longer can contribute to nor withdraw from the launch.
   , projectToken :: AssetClass
   -- ^ The asset that is being launched
   , raisingToken :: AssetClass
@@ -278,8 +275,7 @@ defaultLaunchpadConfig =
     , sundaeFeeTolerance = mockSundaeFeeTolerance
     , sundaeSettingsCurrencySymbol = mockSundaeSettingsCurrencySymbol
     , startTime = 20_000 -- Starts in Slot 20
-    , contributionEndTime = 500_000 -- Ends in Slot 500
-    , withdrawalEndTime = 750_000 -- Ends in Slot 750
+    , endTime = 750_000 -- Ends in Slot 750
     , projectToken = vBTC
     , raisingToken = adaAssetClass
     , projectMinCommitment = 1_000

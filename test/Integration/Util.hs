@@ -211,8 +211,7 @@ nodeConfig lCfg@LaunchpadConfig {..} =
     , presaleTierStartTime
     , defaultStartTime
     , startTime = lCfg.startTime
-    , contributionEndTime
-    , withdrawalEndTime
+    , endTime
     , projectMinCommitment
     , projectMaxCommitment
     , raisingSymbol
@@ -238,7 +237,7 @@ commitFoldConfig lCfg =
     { starter = lCfg.starter
     , commitFoldSymbol = C.commitFoldMintingPolicySymbol (commitFoldPolicyConfig lCfg)
     , nodeSymbol = N.nodeMintingPolicySymbol (nodePolicyConfig lCfg)
-    , withdrawalEndTime = lCfg.withdrawalEndTime
+    , endTime = lCfg.endTime
     , daoAdmin = lCfg.daoAdmin
     }
 
@@ -254,8 +253,7 @@ commitFoldPolicyConfig :: LaunchpadConfig -> C.CommitFoldPolicyConfig
 commitFoldPolicyConfig lCfg =
   C.CommitFoldPolicyConfig
     { starter = lCfg.starter
-    , contributionEndTime = lCfg.contributionEndTime
-    , withdrawalEndTime = lCfg.withdrawalEndTime
+    , endTime = lCfg.endTime
     , nodeSymbol = N.nodeMintingPolicySymbol (nodePolicyConfig lCfg)
     }
 
@@ -275,7 +273,7 @@ rewardsFoldConfig lCfg =
     , raisingToken = snd (unAssetClass lCfg.raisingToken)
     , presaleTierCs = lCfg.presaleTierCs
     , tokensToDistribute = lCfg.tokensToDistribute
-    , withdrawalEndTime = lCfg.withdrawalEndTime
+    , endTime = lCfg.endTime
     , oilAda = lCfg.oilAda
     , commitFoldFeeAda = lCfg.commitFoldFeeAda
     , splitBps = lCfg.splitBps
@@ -310,7 +308,7 @@ firstTokensHolderConfig lCfg =
     , owner = lCfg.owner
     , projectTokensHolderSymbol = PTH.projectTokensHolderMintingPolicySymbol (tokensHolderPolicyConfig lCfg)
     , startTime = lCfg.startTime
-    , withdrawalEndTime = lCfg.withdrawalEndTime
+    , endTime = lCfg.endTime
     , daoAdmin = lCfg.daoAdmin
     }
 
@@ -356,5 +354,5 @@ rewardsHolderConfig lCfg =
     , poolProofSymbol = poolProofMintingPolicySymbol (poolProofPolicyConfig lCfg)
     , usesWr = lCfg.splitBps > 0
     , usesSundae = lCfg.splitBps < 10_000
-    , withdrawalEndTime = lCfg.withdrawalEndTime
+    , endTime = lCfg.endTime
     }

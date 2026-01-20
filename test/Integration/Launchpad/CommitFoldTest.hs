@@ -606,7 +606,7 @@ createCommitFoldInvalidCommitted config = do
   Wallets {..} <- setupWallets config
   admin <- getMainUser
   createHeadNode config admin AddToken
-  waitUntil config.withdrawalEndTime
+  waitUntil config.endTime
   waitNSlots 10 -- so the lower time approximation is after the end time as well
   initCommitFold
     config
@@ -638,7 +638,7 @@ createCommitFoldInvalidNext config = do
   Wallets {..} <- setupWallets config
   admin <- getMainUser
   createHeadNode config admin AddToken
-  waitUntil config.withdrawalEndTime
+  waitUntil config.endTime
   waitNSlots 10 -- so the lower time approximation is after the end time as well
   initCommitFold
     config
@@ -664,7 +664,7 @@ createCommitFoldNotHeadNode config = do
   admin <- getMainUser
   let nodeKey = (unwrapPubKeyHash userWallet1, 0)
   createNode config admin (Node (Just nodeKey) Nothing 0 100) AddToken
-  waitUntil config.withdrawalEndTime
+  waitUntil config.endTime
   waitNSlots 10 -- so the lower time approximation is after the end time as well
   initCommitFold config (pubKeyHashAddress launchpadOwner) userWallet2 Nothing (Just nodeKey)
 
@@ -673,7 +673,7 @@ createCommitFoldWithoutToken config = do
   Wallets {..} <- setupWallets config
   admin <- getMainUser
   createHeadNode config admin SkipToken
-  waitUntil config.withdrawalEndTime
+  waitUntil config.endTime
   waitNSlots 10 -- so the lower time approximation is after the end time as well
   initCommitFold config (pubKeyHashAddress launchpadOwner) userWallet2 Nothing Nothing
 
@@ -682,7 +682,7 @@ createCommitFoldNegativeOvercommitted config = do
   Wallets {..} <- setupWallets config
   admin <- getMainUser
   createHeadNode config admin AddToken
-  waitUntil config.withdrawalEndTime
+  waitUntil config.endTime
   waitNSlots 10 -- so the lower time approximation is after the end time as well
   initCommitFold
     config
@@ -707,7 +707,7 @@ createCommitFoldTest config = do
   Wallets {..} <- setupWallets config
   admin <- getMainUser
   createHeadNode config admin AddToken
-  waitUntil config.withdrawalEndTime
+  waitUntil config.endTime
   waitNSlots 10 -- so the lower time approximation is after the end time as well
   initCommitFold config (pubKeyHashAddress launchpadOwner) userWallet2 Nothing Nothing
 
@@ -752,7 +752,7 @@ createCommitFoldWithCutoff key time config = do
   Wallets {..} <- setupWallets config
   admin <- getMainUser
   createHeadNode config admin AddToken
-  waitUntil config.withdrawalEndTime
+  waitUntil config.endTime
   waitNSlots 10 -- so the lower time approximation is after the end time as well
   initCommitFold
     config

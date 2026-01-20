@@ -52,8 +52,7 @@ data NodeConfig = NodeConfig
   , defaultTierMaxCommitment :: Integer
   , defaultStartTime :: POSIXTime
   , startTime :: POSIXTime
-  , contributionEndTime :: POSIXTime
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   , projectMinCommitment :: Integer
   , projectMaxCommitment :: Integer
   , totalTokens :: Integer
@@ -97,8 +96,7 @@ data PNodeConfig (s :: S)
               , "defaultTierMaxCommitment" ':= PInteger
               , "defaultStartTime" ':= PPOSIXTime
               , "startTime" ':= PPOSIXTime
-              , "contributionEndTime" ':= PPOSIXTime
-              , "withdrawalEndTime" ':= PPOSIXTime
+              , "endTime" ':= PPOSIXTime
               , "projectMinCommitment" ':= PInteger
               , "projectMaxCommitment" ':= PInteger
               , "totalTokens" ':= PInteger
@@ -168,7 +166,7 @@ pvalidateNextNodeRemoval selfTxOutRef selfValidatorHash inputs redeemers = plet
   - 2 list element utxos A and B are spent, where B's validator is being run
   - B utxo has one list element token with its token name equal to the script hash of the list element validator
   - A' utxo is created (the only created node)
-  - the upper time range limit is < the withdrawal end time of the launchpad config
+  - the upper time range limit is < the end time of the launchpad config
   - the difference between the lower time range limit and the createdTime field of B is at least 5 minutes
   - the list element token of B is burned
   - next field of A' is Just (next field of B)
@@ -189,7 +187,7 @@ pvalidateCurrentNodeRemoval ::
   Term s (PValue 'Sorted 'NoGuarantees) ->
   (Term s PPOSIXTime, Term s PPOSIXTime) ->
   Term s PBool
-pvalidateCurrentNodeRemoval withdrawalEndTime nodeCs selfDatum selfTxOutRef selfValidatorHash signatories inputs outputs mint (lowerTime, upperTime) =
+pvalidateCurrentNodeRemoval endTime nodeCs selfDatum selfTxOutRef selfValidatorHash signatories inputs outputs mint (lowerTime, upperTime) =
   pletFields @'["key", "next", "createdTime"] selfDatum \selfF ->
     unTermCont do
       inputNodes <- pletC (passertDoubleton (pfilter # plam (\i -> ppaysToCredential # selfValidatorHash # (ptxInInfoResolved # i)) # inputs))
@@ -198,7 +196,7 @@ pvalidateCurrentNodeRemoval withdrawalEndTime nodeCs selfDatum selfTxOutRef self
         pand'List
           [ ptraceIfFalse "H5" $ ptxSignedBy # signatories # pdata (pcon (PPubKeyHash (pfromData (pfstBuiltin # (pfromData (pfromDJust # selfF.key))))))
           , ptraceIfFalse "H6" $ pisMintingExactAmountForPolicy # (-1) # nodeCs # pscriptHashToTokenName selfValidatorHash # mint
-          , ptraceIfFalse "H7" $ upperTime #< withdrawalEndTime
+          , ptraceIfFalse "H7" $ upperTime #< endTime
           , ptraceIfFalse "H8" $ pnodesRemovalCheck selfTxOutRef lowerTime selfF inputNodes outputNode
           ]
 
@@ -236,7 +234,7 @@ pnodesRemovalCheck selfTxOutRef lowerTime self inputNodes outputNode = unTermCon
 
 {- | The validator for the new node insertion.
 
-  - the upper time range limit is < than the contribution end time of the launchpad config
+  - the upper time range limit is < than the end time of the launchpad config
   - the lower time range limit is > than the start time of the used tier of the launchpad config
   - there is one input list element utxo A, its validator is being run
   - A utxo has one list element token with its token name equal to the script hash of the list element validator
@@ -284,7 +282,7 @@ pvalidateNodeInsertion
   (defaultTierMinCommitment, defaultTierMaxCommitment, defaultStartTime)
   (presaleTierCs, presaleTierMinCommitment, presaleTierMaxCommitment, presaleTierStartTime)
   ownAddress
-  contributionEndTime
+  endTime
   projectTokenHolderCs
   projectTokenHolderValidatorHash
   nodeCs
@@ -362,7 +360,7 @@ pvalidateNodeInsertion
               # nodeAda
         , ptraceIfFalse "H30" $ ptxSignedBy # signatories # pdata (pcon (PPubKeyHash (pfromData (pfstBuiltin # newKey))))
         , ptraceIfFalse "H31" $ lowerTime #> tierStartTime
-        , ptraceIfFalse "H32" $ upperTime #< contributionEndTime
+        , ptraceIfFalse "H32" $ upperTime #< endTime
         , ptraceIfFalse "H33" $ newOutCommitted #>= tierMinCommitment
         , ptraceIfFalse "H34" $ newOutCommitted #<= tierMaxCommitment
         ]
@@ -825,7 +823,7 @@ preclaimNode (nodeCs, selfValidatorHash) admin node (failProofCs, failProofValid
   - there is only one script utxo in the inputs
   - the only currency symbol being burned is the node symbol (equal to 2, because mint always contains 0 ADA)
   - 1 list element token is burned with its token name equal to the script hash of the list element validator
-  - at least "emergencyWithdrawalPeriod" amount of time has passed since the withdrawalEndTime
+  - at least "emergencyWithdrawalPeriod" amount of time has passed since the endTime
   - transaction is signed by:
     - if commitment = 0 (separator node) a dao signature is required
     - otherwise a node owner signature is required
@@ -841,14 +839,14 @@ pnodeEmergencyWithdrawal ::
   Term s PPOSIXTime ->
   Term s (PBuiltinList (PAsData PPubKeyHash)) ->
   Term s PBool
-pnodeEmergencyWithdrawal selfValidatorHash nodeSymbol node lowerTime daoAdmin inputs mint withdrawalEndTime signatories = unTermCont do
+pnodeEmergencyWithdrawal selfValidatorHash nodeSymbol node lowerTime daoAdmin inputs mint endTime signatories = unTermCont do
   nodeF <- pletFieldsC @'["key", "committed"] node
   pure $
     pand'List
       [ ptraceIfFalse "H95" $ pcountAllScriptInputs # inputs #== 1
       , ptraceIfFalse "H96" $ pvalueOf # mint # nodeSymbol # pscriptHashToTokenName selfValidatorHash #== -1
       , ptraceIfFalse "H97" $ plength # ((pto . pto) mint) #== 2
-      , ptraceIfFalse "H98" $ pto (lowerTime - withdrawalEndTime) #> pconstant emergencyWithdrawalPeriod
+      , ptraceIfFalse "H98" $ pto (lowerTime - endTime) #> pconstant emergencyWithdrawalPeriod
       , ptraceIfFalse "H99" $
           pif
             (pfromData nodeF.committed #== 0)
@@ -881,8 +879,7 @@ pnodeScriptValidator cfg node redeemer context = unTermCont do
         , "presaleTierStartTime"
         , "defaultStartTime"
         , "startTime"
-        , "contributionEndTime"
-        , "withdrawalEndTime"
+        , "endTime"
         , "projectMinCommitment"
         , "projectMaxCommitment"
         , "totalTokens"
@@ -934,7 +931,7 @@ pnodeScriptValidator cfg node redeemer context = unTermCont do
                 (cfgF.defaultTierMinCommitment, cfgF.defaultTierMaxCommitment, cfgF.defaultStartTime)
                 (cfgF.presaleTierCs, cfgF.presaleTierMinCommitment, cfgF.presaleTierMaxCommitment, cfgF.presaleTierStartTime)
                 ownAddress
-                cfgF.contributionEndTime
+                cfgF.endTime
                 projectTokenHolderCs
                 projectTokenHolderValidatorHash
                 nodeCs
@@ -967,7 +964,7 @@ pnodeScriptValidator cfg node redeemer context = unTermCont do
           PRemoveCurrentNode _ ->
             ptraceIfFalse "H103" $
               pvalidateCurrentNodeRemoval
-                cfgF.withdrawalEndTime
+                cfgF.endTime
                 nodeCs
                 node
                 selfTxOutRef
@@ -1041,7 +1038,7 @@ pnodeScriptValidator cfg node redeemer context = unTermCont do
                 cfgF.daoAdmin
                 inputs
                 mint
-                cfgF.withdrawalEndTime
+                cfgF.endTime
                 signatories
       ]
 

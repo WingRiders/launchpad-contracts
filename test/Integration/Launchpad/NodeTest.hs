@@ -107,10 +107,6 @@ nodeInsertionTests commitmentAsset = askOption \(ThoroughTests thorough) ->
         False -> []
         True ->
           [ good
-              defaultLaunchpadConfig {raisingToken = commitmentAsset, contributionEndTime = defaultLaunchpadConfig.withdrawalEndTime}
-              "The node can be inserted onto a proper last node of another user when withdrawal end time = contribution end time"
-              (nodeInsertionTest def)
-          , good
               defaultLaunchpadConfig {raisingToken = commitmentAsset}
               "The node can be inserted onto a proper middle node of another user"
               (nodeInsertionTest def {firstNodeChoice = MiddleNode})
@@ -132,8 +128,8 @@ nodeInsertionTests commitmentAsset = askOption \(ThoroughTests thorough) ->
               (nodeInsertionTest def {maliciousAction = ChangeStakingCredential})
           , bad
               defaultLaunchpadConfig {raisingToken = commitmentAsset}
-              "A node cannot be inserted after the withdrawal phase"
-              (nodeInsertionTest def {timing = Just AfterWithdrawalPhase})
+              "A node cannot be inserted after the contribution phase"
+              (nodeInsertionTest def {timing = Just AfterContributionPhase})
           ]
 
 nodeSeparatorInsertionTests :: TestTree
@@ -186,27 +182,19 @@ nodeRemovalTests commitmentAsset = askOption \(ThoroughTests thorough) ->
           defaultLaunchpadConfig {raisingToken = commitmentAsset}
           "The middle node can be removed by the user who inserted it"
           (nodeRemovalTest def {firstNodeChoice = MiddleNode})
-      , good
-          defaultLaunchpadConfig {raisingToken = commitmentAsset}
-          "A node can be removed in the withdrawal phase"
-          (nodeRemovalTest def {timing = Just AfterContributionPhase})
       , bad
           defaultLaunchpadConfig {raisingToken = commitmentAsset}
           "The node cannot be removed by the user who didn't insert it"
           (nodeRemovalTest def {maliciousAction = WrongSignature})
       , bad
           defaultLaunchpadConfig {raisingToken = commitmentAsset}
-          "A node cannot be removed after the withdrawal phase"
-          (nodeRemovalTest def {timing = Just AfterWithdrawalPhase})
+          "A node cannot be removed after the contribution phase"
+          (nodeRemovalTest def {timing = Just AfterContributionPhase})
       ]
       <> case thorough of
         False -> []
         True ->
-          [ good
-              defaultLaunchpadConfig {raisingToken = commitmentAsset, contributionEndTime = defaultLaunchpadConfig.withdrawalEndTime}
-              "The last node can be removed by the user who inserted it when the contribution end time = withdrawal end time"
-              (nodeRemovalTest def)
-          , bad
+          [ bad
               defaultLaunchpadConfig {raisingToken = commitmentAsset}
               "The node owner can't steal the node token"
               (nodeRemovalTest def {maliciousAction = NoMinting})
@@ -279,10 +267,7 @@ nodeRemovalTest NodeTestConfig {..} config = do
   createNode config admin remainingNode AddToken
   waitUntil (config.startTime + minutes 6)
   when (timing == Just AfterContributionPhase) $ do
-    waitUntil config.contributionEndTime
-    waitNSlots 1 -- so the lower approximation is right as well
-  when (timing == Just AfterWithdrawalPhase) $ do
-    waitUntil config.withdrawalEndTime
+    waitUntil config.endTime
     waitNSlots 1 -- so the lower approximation is right as well
   removeNode config admin maliciousAction (remainingNode.key, removedNode.key)
 
@@ -340,10 +325,7 @@ nodeInsertionTest NodeTestConfig {..} config = do
   waitNSlots 1 -- so the lower approximation is right as well
   createNode config admin node AddToken
   when (timing == Just AfterContributionPhase) $ do
-    waitUntil config.contributionEndTime
-    waitNSlots 1 -- so the lower approximation is right as well
-  when (timing == Just AfterWithdrawalPhase) $ do
-    waitUntil config.withdrawalEndTime
+    waitUntil config.endTime
     waitNSlots 1 -- so the lower approximation is right as well
   insertNode config admin maliciousAction node.key newNode tier
 

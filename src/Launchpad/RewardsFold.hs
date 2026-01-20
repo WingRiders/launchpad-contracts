@@ -50,7 +50,7 @@ data RewardsFoldConfig = RewardsFoldConfig
   , raisingToken :: TokenName
   , presaleTierCs :: CurrencySymbol
   , tokensToDistribute :: Integer
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   , oilAda :: Integer
   , commitFoldFeeAda :: Integer
   , -- if 0, only sundae pool is created
@@ -88,7 +88,7 @@ data PRewardsFoldConfig (s :: S)
               , "raisingToken" ':= PTokenName
               , "presaleTierCs" ':= PCurrencySymbol
               , "tokensToDistribute" ':= PInteger
-              , "withdrawalEndTime" ':= PPOSIXTime
+              , "endTime" ':= PPOSIXTime
               , "oilAda" ':= PInteger
               , "commitFoldFeeAda" ':= PInteger
               , "splitBps" ':= PInteger
@@ -397,7 +397,7 @@ pnextRewardsStateFirstCome
 
 pemergencyWithdrawRewardsFold :: Term s PRewardsFoldConfig -> Term s PRewardsFoldDatum -> Term s PScriptContext -> Term s PBool
 pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
-  cfgF <- pletFieldsC @'["withdrawalEndTime", "rewardsFoldPolicy"] cfg
+  cfgF <- pletFieldsC @'["endTime", "rewardsFoldPolicy"] cfg
   let commitFoldOwner = pfield @"commitFoldOwner" # datum
   contextF <- pletFieldsC @'["purpose", "txInfo"] context
   txInfoF <- pletFieldsC @'["outputs", "inputs", "mint", "signatories", "validRange"] contextF.txInfo
@@ -409,7 +409,7 @@ pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
       [ ptraceIfFalse "L16" $ pcountAllScriptInputs # txInfoF.inputs #== 1
       , ptraceIfFalse "L17" $ pvalueOf # txInfoF.mint # cfgF.rewardsFoldPolicy # pscriptHashToTokenName selfValidatorHash #== -1
       , ptraceIfFalse "L18" $ plength # ((pto . pto) (pfromData txInfoF.mint)) #== 2
-      , ptraceIfFalse "L19" $ pto (lowerTime - cfgF.withdrawalEndTime) #> pconstant emergencyWithdrawalPeriod
+      , ptraceIfFalse "L19" $ pto (lowerTime - cfgF.endTime) #> pconstant emergencyWithdrawalPeriod
       , ptraceIfFalse "L20" $ ptxSignedBy # txInfoF.signatories # (paddressPubKeyCredential # commitFoldOwner)
       ]
 
@@ -420,7 +420,7 @@ pemergencyWithdrawRewardsFold cfg datum context = unTermCont do
   - there is only one script utxo in the inputs
   - 1 rewards fold token is burned with its token name equal to the script hash of the rewards fold validator
   - the only currency symbol being burned is the rewards fold symbol (equal to 2, because mint always contains 0 ADA)
-  - at least "emergencyWithdrawalPeriod" amount of time has passed since the withdrawalEndTime
+  - at least "emergencyWithdrawalPeriod" amount of time has passed since the endTime
   - the transaction is signed by the commit fold owner
 
   Rewards fold:

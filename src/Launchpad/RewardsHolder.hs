@@ -31,7 +31,7 @@ data RewardsHolderConfig = RewardsHolderConfig
   , poolProofSymbol :: CurrencySymbol
   , usesWr :: Bool
   , usesSundae :: Bool
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   }
   deriving stock (Generic)
 
@@ -47,7 +47,7 @@ data PRewardsHolderConfig (s :: S)
               , "poolProofSymbol" ':= PCurrencySymbol
               , "usesWr" ':= PBool
               , "usesSundae" ':= PBool
-              , "withdrawalEndTime" ':= PPOSIXTime
+              , "endTime" ':= PPOSIXTime
               ]
           )
       )
@@ -88,7 +88,7 @@ prewardsHolderValidator cfg datum context = unTermCont do
         , "poolProofSymbol"
         , "usesWr"
         , "usesSundae"
-        , "withdrawalEndTime"
+        , "endTime"
         ]
       cfg
   contextFields <- pletFieldsC @'["txInfo"] context
@@ -134,7 +134,7 @@ prewardsHolderValidator cfg datum context = unTermCont do
   pure $
     pand'List
       [ ptraceIfFalse "M7" signedByOwner
-      , (pto (lowerTime - cfgF.withdrawalEndTime) #> pconstant emergencyWithdrawalPeriod)
+      , (pto (lowerTime - cfgF.endTime) #> pconstant emergencyWithdrawalPeriod)
           #|| (pif cfgF.usesWr (ptraceIfFalse "M8" $ hasCorrectPoolProof (pcon PWr)) pfalse)
           #|| (pif cfgF.usesSundae (ptraceIfFalse "M9" $ hasCorrectPoolProof (pcon PSundae)) pfalse)
       ]
