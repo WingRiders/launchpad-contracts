@@ -27,8 +27,7 @@ import PlutusTx qualified
 -}
 data CommitFoldPolicyConfig = CommitFoldPolicyConfig
   { starter :: TxOutRef
-  , contributionEndTime :: POSIXTime
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   , nodeSymbol :: CurrencySymbol
   }
   deriving (Generic)
@@ -42,8 +41,7 @@ data PCommitFoldPolicyConfig (s :: S)
           s
           ( PDataRecord
               [ "starter" ':= PTxOutRef
-              , "contributionEndTime" ':= PPOSIXTime
-              , "withdrawalEndTime" ':= PPOSIXTime
+              , "endTime" ':= PPOSIXTime
               , "nodeSymbol" ':= PCurrencySymbol
               ]
           )
@@ -73,13 +71,13 @@ Initialize the fold:
   - the key field of the node is nothing
   - the next field of K is equal to the next field of the node
   - the nodeCount field of K is 1
-  - the lower approximation of the current time is greater than the withdrawal end time of the launchpad
+  - the lower approximation of the current time is greater than the end time of the launchpad
   - the owner field of K is a pubkey address
   - the owner address staking credential is not StakingPtr
   - the committed field of K is 0
   - if cutoffTime field of K is Just
     - the overcommitted field of K is not negative
-    - cutoffTime field of K is lower than contributionEndTime
+    - cutoffTime field of K is lower than endTime
     - cutoffKey field of K is Just
     - cutoffKey bytestring is 28 bytes (1B bytestrings do not need to be supported, since there will always be a 28B option)
     - cutoffKey index is [0, 1000]
@@ -96,7 +94,7 @@ pcommitFoldMintingPolicy = plam \cfg _redeemer context ->
 
 pvalidateCommitFoldToken :: Term s (PCommitFoldPolicyConfig :--> PScriptContext :--> PBool)
 pvalidateCommitFoldToken = plam \cfg context -> unTermCont do
-  cfgF <- pletFieldsC @'["contributionEndTime", "withdrawalEndTime", "nodeSymbol"] cfg
+  cfgF <- pletFieldsC @'["endTime", "nodeSymbol"] cfg
   contextFields <- pletFieldsC @'["purpose", "txInfo"] context
   tx <- pletFieldsC @'["outputs", "mint", "referenceInputs", "validRange"] contextFields.txInfo
   foldCs <- pletC (pownCurrencySymbol contextFields.purpose)
@@ -108,8 +106,7 @@ pvalidateCommitFoldToken = plam \cfg context -> unTermCont do
       [
         ( mintedAmount #== 1
         , pvalidateCommitTokenInitialization
-            cfgF.contributionEndTime
-            cfgF.withdrawalEndTime
+            cfgF.endTime
             foldCs
             foldTn
             nodeCs
@@ -123,7 +120,6 @@ pvalidateCommitFoldToken = plam \cfg context -> unTermCont do
 
 pvalidateCommitTokenInitialization ::
   Term s PPOSIXTime ->
-  Term s PPOSIXTime ->
   Term s PCurrencySymbol ->
   Term s PTokenName ->
   Term s PCurrencySymbol ->
@@ -131,7 +127,7 @@ pvalidateCommitTokenInitialization ::
   Term s (PBuiltinList PTxInInfo) ->
   Term s PTimestamps ->
   Term s PBool
-pvalidateCommitTokenInitialization contributionEndTime withdrawalEndTime foldSymbol foldToken nodeSymbol outputs referenceInputs timestamps = unTermCont do
+pvalidateCommitTokenInitialization endTime foldSymbol foldToken nodeSymbol outputs referenceInputs timestamps = unTermCont do
   PTimestamps currentTime _ <- pmatchC timestamps
   foldF <-
     pletFieldsC @'["datum", "value"]
@@ -158,7 +154,7 @@ pvalidateCommitTokenInitialization contributionEndTime withdrawalEndTime foldSym
   nodeD <- pletFieldsC @'["key", "next"] $ pfromPDatum @PNode # (ptryFromInlineDatum # nodeF.datum)
   pure $
     pand'List
-      [ ptraceIfFalse "A3" $ currentTime #> withdrawalEndTime
+      [ ptraceIfFalse "A3" $ currentTime #> endTime
       , ptraceIfFalse "A4" $ pfromData foldD.committed #== 0
       , ptraceIfFalse "A5" $ foldD.next #== nodeD.next
       , ptraceIfFalse "A6" $ pfromData foldD.nodeCount #== 1
@@ -170,7 +166,7 @@ pvalidateCommitTokenInitialization contributionEndTime withdrawalEndTime foldSym
               plet (pfromData $ pfromDJust # foldD.cutoffKey) \key ->
                 pand'List
                   [ ptraceIfFalse "A9" $ pfromData foldD.overcommitted #>= 0
-                  , ptraceIfFalse "A10" $ time #< contributionEndTime
+                  , ptraceIfFalse "A10" $ time #< endTime
                   , ptraceIfFalse "A11" $ plengthBS # (pfromData $ pfstBuiltin # key) #== pconstant expectedPkhLength
                   , ptraceIfFalse "A12" $ pbetween (pconstant $ minNodeIndex - 1) (pfromData $ psndBuiltin # key) (pconstant $ maxNodeIndex + 1)
                   ]

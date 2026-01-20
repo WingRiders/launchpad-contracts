@@ -81,10 +81,6 @@ completeTests = askOption \(ThoroughTests thourough) ->
         False -> []
         True ->
           [ good defaultLaunchpadConfig "Whole launchpad flow - Wr - Pool exists" (run_launchpad PoolExists)
-          , good
-              defaultLaunchpadConfig {contributionEndTime = defaultLaunchpadConfig.withdrawalEndTime}
-              "Whole launchpad flow - Wr - No Pool - contribution end time = withdrawal end time"
-              (run_launchpad NoPool)
           , good defaultLaunchpadConfig {projectMinCommitment = 80001} "Whole launchpad flow - Wr - Fail Launchpad" (run_launchpad Fails)
           , -- NOTE: the min supported collateral is 4 ada
             good defaultLaunchpadConfig {collateral = 4_000_000} "Whole launchpad flow - Wr - No Pool - 4 ADA collateral" (run_launchpad NoPool)
@@ -146,7 +142,7 @@ run_launchpad action initConfig = do
   insertNode config admin Node.None (Just (unwrapPubKeyHash sortedPkh2, 0)) node3 Presale
   insertNode config admin Node.None (Just (unwrapPubKeyHash sortedPkh3, 0)) node4 Default
 
-  waitUntil config.withdrawalEndTime
+  waitUntil config.endTime
   waitNSlots 2
 
   initCommitFold config (pubKeyHashAddress admin) userWallet2 Nothing Nothing

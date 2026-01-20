@@ -35,7 +35,7 @@ data CommitFoldConfig = CommitFoldConfig
   { starter :: TxOutRef
   , commitFoldSymbol :: CurrencySymbol
   , nodeSymbol :: CurrencySymbol
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   , daoAdmin :: PubKeyHash
   }
   deriving (Generic)
@@ -51,7 +51,7 @@ data PCommitFoldConfig (s :: S)
               [ "starter" ':= PTxOutRef
               , "commitFoldSymbol" ':= PCurrencySymbol
               , "nodeSymbol" ':= PCurrencySymbol
-              , "withdrawalEndTime" ':= PPOSIXTime
+              , "endTime" ':= PPOSIXTime
               , "daoAdmin" ':= PPubKeyHash
               ]
           )
@@ -208,7 +208,7 @@ pvalidateCommitFoldApplication nodeCs selfCs selfValidatorHash ownInput selfDatu
 pvalidateCommitFold ::
   Term s PCommitFoldConfig -> Term s PCommitFoldDatum -> Term s PCommitFoldRedeemer -> Term s PScriptContext -> Term s PBool
 pvalidateCommitFold cfg datum redeemer context = unTermCont do
-  cfgF <- pletFieldsC @'["commitFoldSymbol", "nodeSymbol", "withdrawalEndTime", "daoAdmin"] cfg
+  cfgF <- pletFieldsC @'["commitFoldSymbol", "nodeSymbol", "endTime", "daoAdmin"] cfg
 
   contextF <- pletFieldsC @'["purpose", "txInfo"] context
   tx <- pletFieldsC @'["inputs", "outputs", "referenceInputs", "redeemers", "mint", "validRange", "signatories"] contextF.txInfo
@@ -260,7 +260,7 @@ pvalidateCommitFold cfg datum redeemer context = unTermCont do
           -- there is only one script utxo in the inputs
           -- 1 commit fold token is burned with its token name equal to the script hash of the commit fold validator
           -- the only currency symbol being burned is the commit fold symbol (equal to 2, because mint always contains 0 ADA)
-          -- at least "emergencyWithdrawalPeriod" amount of time has passed since the withdrawalEndTime
+          -- at least "emergencyWithdrawalPeriod" amount of time has passed since the endTime
           -- transaction is signed by the commit fold owner
           PCommitFoldEmergencyWithdrawal _ -> unTermCont do
             PTimestamps lowerTime _ <- pmatchC (pfiniteTxValidityRangeTimestamps # tx.validRange)
@@ -269,7 +269,7 @@ pvalidateCommitFold cfg datum redeemer context = unTermCont do
                 [ ptraceIfFalse "G14" $ pcountAllScriptInputs # tx.inputs #== 1
                 , ptraceIfFalse "G15" $ pvalueOf # tx.mint # selfCs # pscriptHashToTokenName selfValidatorHash #== -1
                 , ptraceIfFalse "G16" $ plength # ((pto . pto) (pfromData tx.mint)) #== 2
-                , ptraceIfFalse "G17" $ pto (lowerTime - cfgF.withdrawalEndTime) #> pconstant emergencyWithdrawalPeriod
+                , ptraceIfFalse "G17" $ pto (lowerTime - cfgF.endTime) #> pconstant emergencyWithdrawalPeriod
                 , ptraceIfFalse "G18" $ ptxSignedByPkh # (paddressPubKeyCredential # owner) # tx.signatories
                 ]
       ]

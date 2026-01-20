@@ -28,7 +28,6 @@ data MaliciousNodeAction
 
 data NodeActionTiming
   = AfterContributionPhase
-  | AfterWithdrawalPhase
   deriving (Eq)
 
 findNodeUtxo :: Maybe NodeKey -> [(TxOutRef, TxOut)] -> (TxOutRef, TxOut)

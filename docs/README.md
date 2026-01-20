@@ -44,11 +44,8 @@ data LaunchpadConfig = LaunchpadConfig
   -- ^ The currency symbol of the Sundae settings NFT.
   , startTime :: POSIXTime
   -- ^ The start time must be set to the lowest of the tiers start times.
-  , contributionEndTime :: POSIXTime
-  -- ^ The time after which users no longer can contribute to the launch.
-  , withdrawalEndTime :: POSIXTime
-  -- ^ The time after which users no longer can withdraw from the launch.
-  -- the withdrawalEndTime must be after the contributionEndTime
+  , endTime :: POSIXTime
+  -- ^ The time after which users no longer can contribute to nor withdraw from the launch.
   , projectToken :: AssetClass
   -- ^ The asset that is being launched
   , raisingToken :: AssetClass
@@ -150,7 +147,7 @@ data TokensHolderFirstConfig = TokensHolderFirstConfig
   , startTime :: POSIXTime
   , projectTokensHolderSymbol :: CurrencySymbol
   , starter :: TxOutRef
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   , daoAdmin :: PubKeyHash
   }
   
@@ -220,8 +217,7 @@ data NodeConfig = NodeConfig
   , defaultTierMaxCommitment :: Integer
   , defaultStartTime :: POSIXTime
   , startTime :: POSIXTime
-  , contributionEndTime :: POSIXTime
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   , projectMinCommitment :: Integer
   , projectMaxCommitment :: Integer
   , totalTokens :: Integer
@@ -292,8 +288,7 @@ The minting policy has the following configuration, the redeemer is ignored:
 ```haskell
 data CommitFoldPolicyConfig = CommitFoldPolicyConfig
   { starter :: TxOutRef
-  , contributionEndTime :: POSIXTime
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   , nodeSymbol :: CurrencySymbol
   }
 ```
@@ -306,7 +301,7 @@ data CommitFoldConfig = CommitFoldConfig
   { starter :: TxOutRef
   , commitFoldSymbol :: CurrencySymbol
   , nodeSymbol :: CurrencySymbol
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   , daoAdmin :: PubKeyHash
   }
 
@@ -367,7 +362,7 @@ data RewardsFoldConfig = RewardsFoldConfig
   , raisingToken :: TokenName
   , presaleTierCs :: CurrencySymbol
   , tokensToDistribute :: Integer
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   , oilAda :: Integer
   , commitFoldFeeAda :: Integer
   , -- if 0, only sundae pool is created
@@ -428,7 +423,7 @@ data RewardsHolderConfig = RewardsHolderConfig
   , poolProofSymbol :: CurrencySymbol
   , usesWr :: Bool
   , usesSundae :: Bool
-  , withdrawalEndTime :: POSIXTime
+  , endTime :: POSIXTime
   }
 
 data RewardsHolderDatum = RewardsHolderDatum
