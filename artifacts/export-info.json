@@ -9,33 +9,33 @@
   "policies": [
     {
       "name": "commit-fold-policy",
-      "size": 2274,
-      "symbol": "0ab57b63533ff2bc81c635d8aa9e2389c6bcca3d414950a8446b335d"
+      "size": 3306,
+      "symbol": "75cacf9818d20e122f4ef3e7c77a5d925b61a2c2ec5d322ad812e624"
     },
     {
       "name": "node-policy",
-      "size": 1451,
-      "symbol": "83e60dd91e8cbf5921ed632850de564f82f9cfc06bc44ec3323a7bfd"
+      "size": 2047,
+      "symbol": "5ce3cda5eeb97c5765f24cdba39bcc997fbfee28c5a1f8803f225ddd"
     },
     {
       "name": "pool-proof-policy",
-      "size": 4345,
-      "symbol": "804cb1413e803c57a226ab6f991428c2ea58ec324e5f23af5f913e54"
+      "size": 5551,
+      "symbol": "ad12b79233f2fd77355cbd267722a00b69f3bc6d57f78ef23c4ac1ce"
     },
     {
       "name": "project-tokens-holder-policy",
-      "size": 941,
-      "symbol": "ca53a51e2f1f38c1cb8850831274860b944153b6ffb1b4cccfaf158f"
+      "size": 1357,
+      "symbol": "5d86ca211bf7eeba917231d0442ecdf7bfcb38e15044c9f30eb27b0b"
     },
     {
       "name": "rewards-fold-policy",
-      "size": 1926,
-      "symbol": "cc6bd15f0b0e905c32055154e6ff2b468b24ebaa9cebe263734c8bb7"
+      "size": 2620,
+      "symbol": "48d80b367d09eee89f6c6320ac1b61a5e8d49e0a8e42211f4a53b02c"
     },
     {
       "name": "fail-proof-policy",
-      "size": 1093,
-      "symbol": "909516674e078ddf8f213494e1bc46a27bba7ac70be43b523d05c14f"
+      "size": 1516,
+      "symbol": "58a14680b717f6cd2f3510ceb20d37273122812d5853645454c05dbc"
     },
     {
       "name": "always-fails-token",
@@ -44,25 +44,25 @@
     },
     {
       "name": "free-nft-policy",
-      "size": 343,
-      "symbol": "7a85b4a6bcf180063740b93d1b9c02db9741ea991159ba694bb54879"
+      "size": 436,
+      "symbol": "a076d5d1ae3abd9e8e027400dd8b0040e6598687c94b51688d14d52e"
     },
     {
       "name": "fixed-supply-unapplied-policy",
-      "size": 136,
-      "symbol": "3501a32d7191af9bc85349d54b4216136e4a41ca35c7820a2617df3b"
+      "size": 166,
+      "symbol": "ddf367ebaea01cc970a290b6d1333822baa28b57fde5ec6a23cc0872"
     }
   ],
   "validators": [
     {
-      "hash": "2dd8898160fe20586f76d0e0b10bfc1a938e83d27b47acd642a9f1c0",
+      "hash": "8bf9b544f789e17e2f90147d45e1fe9309e0e7c2047072ecd6392db0",
       "name": "commit-fold",
-      "size": 5351
+      "size": 7075
     },
     {
-      "hash": "7e298eb84c2f2b08d2af405cfc251ff63befefca95b62a606ec6fedc",
+      "hash": "015ed1faaf997957c86093354039eb580ac685c7e1b83f42381871b6",
       "name": "node",
-      "size": 9821
+      "size": 14302
     },
     {
       "hash": "ab2b77feb5b9c1b91f964b528cf0ade8007e2ad0fd0a7e3fce6d9014",
@@ -70,24 +70,24 @@
       "size": 7
     },
     {
-      "hash": "99eeb6cb13300a45b800089b60e68d0fdac4c9094299996fba34dc1a",
+      "hash": "cb2154b6be8ce8e1102cb7df2af565eb01b2832180df14b59131258e",
       "name": "project-tokens-holder-final",
-      "size": 6190
+      "size": 9517
     },
     {
-      "hash": "67d322de99a3815c99e7eb74bfbacab081ed7f9720bdf9447f0ccb79",
+      "hash": "971b997e312ae57a3cdb846a0f9894ee5aba32077a920befea6d7b3a",
       "name": "project-tokens-holder-first",
-      "size": 1440
+      "size": 1904
     },
     {
-      "hash": "a29d7f3a3aee43067ccfe2553739a9bfcbded566747b257ae8c71966",
+      "hash": "6813d4c3018ec12ca5ed855d1318897e547da7088a769ad99e4897fd",
       "name": "rewards-fold",
-      "size": 9272
+      "size": 12903
     },
     {
-      "hash": "521c046436300bb4cb9ade0163e8c8b228db248ba0033c6a00a450ff",
+      "hash": "9d0bf7b1fd1a29dbfab9a4291400ac6b8c878a6d4c9a76f399ecb0b1",
       "name": "rewards-holder",
-      "size": 1446
+      "size": 2114
     },
     {
       "hash": "51936f3c98a04b6609aa9b5c832ba1182cf43a58e534fcc05db09d69",
@@ -95,14 +95,14 @@
       "size": 7
     },
     {
-      "hash": "6eb05cf724032b747c429286e198f932d0bf1c045d9d93e601171d87",
+      "hash": "6be81af4764dcc521f339df380a1d4056b06c91da2cf9a4b71a114b8",
       "name": "ref-script-carrier",
-      "size": 334
+      "size": 578
     },
     {
-      "hash": "103ef6ddf248cbb5c15ec28575744ebc79a73f4182475ec00ee91b45",
+      "hash": "6ede7e12c88dcfd2c8956074743465a16f9ff1bfcd572b31fa07a101",
       "name": "vesting",
-      "size": 2477
+      "size": 3560
     }
   ]
 }
