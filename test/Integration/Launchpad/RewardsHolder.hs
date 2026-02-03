@@ -3,7 +3,7 @@ module Integration.Launchpad.RewardsHolder where
 import Data.Foldable (foldl')
 import Data.Functor (void)
 import Integration.Launchpad.Validators
-import Integration.Mock (LaunchpadConfig (LaunchpadConfig, projectToken, raisingToken), oilAdaAmount)
+import Integration.Mock (LaunchpadConfig (..), oilAdaAmount)
 import Launchpad.Types (
   NodeKey,
   RewardsHolderDatum (..),
@@ -43,6 +43,9 @@ createRewardsHolder action config@LaunchpadConfig {projectToken, raisingToken} r
           , projectToken = projectTn
           , raisingSymbol = raisingCs
           , raisingToken = raisingTn
+          , usesWr = if config.splitBps > 0 then 1 else 0
+          , usesSundae = if config.splitBps < 10_000 then 1 else 0
+          , endTime = config.endTime
           }
   let value = rewardValue <> assetClassValue adaAssetClass oilAdaAmount
   usp <- spend wallet value

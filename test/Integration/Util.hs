@@ -352,7 +352,4 @@ rewardsHolderConfig lCfg =
   RH.RewardsHolderConfig
     { poolProofValidatorHash = poolProofScriptValidatorHash (poolProofConfig lCfg)
     , poolProofSymbol = poolProofMintingPolicySymbol (poolProofPolicyConfig lCfg)
-    , usesWr = lCfg.splitBps > 0
-    , usesSundae = lCfg.splitBps < 10_000
-    , endTime = lCfg.endTime
     }
