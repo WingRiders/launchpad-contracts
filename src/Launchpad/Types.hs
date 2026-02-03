@@ -500,6 +500,11 @@ data RewardsHolderDatum = RewardsHolderDatum
   , projectToken :: TokenName
   , raisingSymbol :: CurrencySymbol
   , raisingToken :: TokenName
+  , -- We don't use a bool here because
+    -- plutarch does not have PTryFrom PData (PAsData PBool)
+    usesWr :: Integer -- 0 is false, 1 is true
+  , usesSundae :: Integer -- 0 is false, 1 is true
+  , endTime :: POSIXTime
   }
   deriving (Show, Eq, Ord, Generic)
 
@@ -517,6 +522,9 @@ data PRewardsHolderDatum (s :: S)
               , "projectToken" ':= PTokenName
               , "raisingSymbol" ':= PCurrencySymbol
               , "raisingToken" ':= PTokenName
+              , "usesWr" ':= PInteger -- 0 is false, 1 is true
+              , "usesSundae" ':= PInteger -- 0 is false, 1 is true
+              , "endTime" ':= PPOSIXTime
               ]
           )
       )

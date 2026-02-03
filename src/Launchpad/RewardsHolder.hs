@@ -29,9 +29,6 @@ import PlutusTx qualified
 data RewardsHolderConfig = RewardsHolderConfig
   { poolProofValidatorHash :: ScriptHash
   , poolProofSymbol :: CurrencySymbol
-  , usesWr :: Bool
-  , usesSundae :: Bool
-  , endTime :: POSIXTime
   }
   deriving stock (Generic)
 
@@ -45,9 +42,6 @@ data PRewardsHolderConfig (s :: S)
           ( PDataRecord
               [ "poolProofValidatorHash" ':= PScriptHash
               , "poolProofSymbol" ':= PCurrencySymbol
-              , "usesWr" ':= PBool
-              , "usesSundae" ':= PBool
-              , "endTime" ':= PPOSIXTime
               ]
           )
       )
@@ -86,9 +80,6 @@ prewardsHolderValidator cfg datum context = unTermCont do
     pletFieldsC
       @'[ "poolProofValidatorHash"
         , "poolProofSymbol"
-        , "usesWr"
-        , "usesSundae"
-        , "endTime"
         ]
       cfg
   contextFields <- pletFieldsC @'["txInfo"] context
@@ -100,6 +91,9 @@ prewardsHolderValidator cfg datum context = unTermCont do
         , "projectToken"
         , "raisingSymbol"
         , "raisingToken"
+        , "usesWr"
+        , "usesSundae"
+        , "endTime"
         ]
       datum
 
@@ -134,9 +128,9 @@ prewardsHolderValidator cfg datum context = unTermCont do
   pure $
     pand'List
       [ ptraceIfFalse "M7" signedByOwner
-      , (pto (lowerTime - cfgF.endTime) #> pconstant emergencyWithdrawalPeriod)
-          #|| (pif cfgF.usesWr (ptraceIfFalse "M8" $ hasCorrectPoolProof (pcon PWr)) pfalse)
-          #|| (pif cfgF.usesSundae (ptraceIfFalse "M9" $ hasCorrectPoolProof (pcon PSundae)) pfalse)
+      , (pto (lowerTime - datumF.endTime) #> pconstant emergencyWithdrawalPeriod)
+          #|| (pif (pfromData datumF.usesWr #== 1) (ptraceIfFalse "M8" $ hasCorrectPoolProof (pcon PWr)) pfalse)
+          #|| (pif (pfromData datumF.usesSundae #== 1) (ptraceIfFalse "M9" $ hasCorrectPoolProof (pcon PSundae)) pfalse)
       ]
 
 rewardsHolderValidator :: Term s (PRewardsHolderConfig :--> PValidator)
