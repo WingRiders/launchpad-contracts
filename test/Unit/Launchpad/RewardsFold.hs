@@ -16,6 +16,7 @@ import PlutusLedgerApi.V2 (
   CurrencySymbol,
   Datum (..),
   OutputDatum (..),
+  POSIXTime,
   PubKeyHash,
   ScriptHash,
   ToData (..),
@@ -252,6 +253,21 @@ adaValue = singleton adaSymbol adaToken
 usdcValue :: Integer -> Value
 usdcValue = singleton usdcSymbol usdcToken
 
+mockUsesSundae :: Bool
+mockUsesSundae = False
+
+mockUsesSundaeInt :: Integer
+mockUsesSundaeInt = 0
+
+mockEndTime :: POSIXTime
+mockEndTime = 123456
+
+mockUsesWr :: Bool
+mockUsesWr = True
+
+mockUsesWrInt :: Integer
+mockUsesWrInt = 1
+
 pnextRewardsStateTests :: TestTree
 pnextRewardsStateTests =
   let pnextState = plam $ \state node reward ->
@@ -265,6 +281,9 @@ pnextRewardsStateTests =
           (pconstant mockNodeHash)
           (pconstant mockRewardsHolderHash)
           (pconstant oilAdaAmount)
+          (pconstant mockEndTime)
+          (pconstant mockUsesWr)
+          (pconstant mockUsesSundae)
           # state
           # node
           # reward
@@ -307,6 +326,9 @@ pnextRewardsStateTests =
                           mockProjectToken
                           usdcSymbol
                           usdcToken
+                          mockUsesWrInt
+                          mockUsesSundaeInt
+                          mockEndTime
                       )
                   )
             )
@@ -336,6 +358,9 @@ pnextRewardsStateTests =
                           mockProjectToken
                           usdcSymbol
                           usdcToken
+                          mockUsesWrInt
+                          mockUsesSundaeInt
+                          mockEndTime
                       )
                   )
             )
@@ -375,6 +400,9 @@ pnextRewardsStateTests =
                           mockProjectToken
                           usdcSymbol
                           usdcToken
+                          mockUsesWrInt
+                          mockUsesSundaeInt
+                          mockEndTime
                       )
                   )
             )
@@ -436,6 +464,9 @@ pnextRewardsStateTests =
                             mockProjectToken
                             usdcSymbol
                             usdcToken
+                            mockUsesWrInt
+                            mockUsesSundaeInt
+                            mockEndTime
                         )
                     )
               )
@@ -461,6 +492,9 @@ pnextRewardsStateTests =
                             mockProjectToken
                             usdcSymbol
                             usdcToken
+                            mockUsesWrInt
+                            mockUsesSundaeInt
+                            mockEndTime
                         )
                     )
               )
@@ -486,6 +520,9 @@ pnextRewardsStateTests =
                             mockProjectToken
                             usdcSymbol
                             usdcToken
+                            mockUsesWrInt
+                            mockUsesSundaeInt
+                            mockEndTime
                         )
                     )
               )
@@ -512,6 +549,9 @@ pnextRewardsStateTests =
                             mockProjectToken
                             usdcSymbol
                             usdcToken
+                            mockUsesWrInt
+                            mockUsesSundaeInt
+                            mockEndTime
                         )
                     )
               )
@@ -537,6 +577,9 @@ pnextRewardsStateTests =
                             mockProjectToken
                             usdcSymbol
                             usdcToken
+                            mockUsesWrInt
+                            mockUsesSundaeInt
+                            mockEndTime
                         )
                     )
               )
@@ -562,6 +605,9 @@ pnextRewardsStateTests =
                             mockProjectToken
                             usdcSymbol
                             usdcToken
+                            mockUsesWrInt
+                            mockUsesSundaeInt
+                            mockEndTime
                         )
                     )
               )
@@ -589,6 +635,9 @@ pnextRewardsStateTests =
                             mockProjectToken
                             usdcSymbol
                             usdcToken
+                            mockUsesWrInt
+                            mockUsesSundaeInt
+                            mockEndTime
                         )
                     )
               )
@@ -615,6 +664,9 @@ pnextRewardsStateTests =
                             mockProjectToken
                             usdcSymbol
                             usdcToken
+                            mockUsesWrInt
+                            mockUsesSundaeInt
+                            mockEndTime
                         )
                     )
               )
@@ -638,6 +690,9 @@ pnextRewardsStateTests =
                             mockProjectToken
                             adaSymbol
                             adaToken
+                            mockUsesWrInt
+                            mockUsesSundaeInt
+                            mockEndTime
                         )
                     )
               )

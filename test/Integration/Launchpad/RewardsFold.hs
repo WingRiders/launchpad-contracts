@@ -253,12 +253,34 @@ nodeReward config differentStakingCredentialReward rewardsFold (nodeOut, node) a
         then
           payToScript
             (appendStakingCredential mockStakingCredential (rewardsHolderValidator config))
-            (InlineDatum (RewardsHolderDatum nodeKey projectSymbol projectToken raisingSymbol raisingToken))
+            ( InlineDatum
+                ( RewardsHolderDatum
+                    nodeKey
+                    projectSymbol
+                    projectToken
+                    raisingSymbol
+                    raisingToken
+                    usesWr
+                    usesSundae
+                    endTime
+                )
+            )
             rewardsHolderValue
         else
           payToScript
             (rewardsHolderValidator config)
-            (InlineDatum (RewardsHolderDatum nodeKey projectSymbol projectToken raisingSymbol raisingToken))
+            ( InlineDatum
+                ( RewardsHolderDatum
+                    nodeKey
+                    projectSymbol
+                    projectToken
+                    raisingSymbol
+                    raisingToken
+                    usesWr
+                    usesSundae
+                    endTime
+                )
+            )
             rewardsHolderValue
 
     rewardsHolderValue =
@@ -273,6 +295,9 @@ nodeReward config differentStakingCredentialReward rewardsFold (nodeOut, node) a
     separatorNode = node.committed == 0
     headNode = node.key == Nothing
     nodeKey = fromJust node.key
+    usesWr = if config.splitBps > 0 then 1 else 0
+    usesSundae = if config.splitBps < 10_000 then 1 else 0
+    endTime = config.endTime
     AssetClass (projectSymbol, projectToken) = config.projectToken
     AssetClass (raisingSymbol, raisingToken) = config.raisingToken
 
