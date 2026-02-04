@@ -53,21 +53,21 @@ pisNodeValueCorrect ::
     )
 pisNodeValueCorrect = phoistAcyclic $ plam \raisingSymbol raisingToken presaleCs nodeCs nodeTn tier value committed expectedOil ->
   pand'List
-    [ pvalueOf # value # nodeCs # nodeTn #== 1
+    [ ptraceIfFalse "nvc0" $ pvalueOf # value # nodeCs # nodeTn #== 1
     , pmatch (ptierCs presaleCs tier) \case
-        PJust tierCs -> psnd # (pvalueOfSingleton' # tierCs # value) #== 1
+        PJust tierCs -> ptraceIfFalse "nvc1" $ psnd # (pvalueOfSingleton' # tierCs # value) #== 1
         PNothing -> ptrue
     , pif
         (pisAda # raisingSymbol)
         ( pand'List
-            [ pvalueOf # value # padaSymbol # padaToken #>= expectedOil + committed
-            , pcountOfUniqueTokens # value #<= 3
+            [ ptraceIfFalse "nvc2" $ pvalueOf # value # padaSymbol # padaToken #>= expectedOil + committed
+            , ptraceIfFalse "nvc3" $ pcountOfUniqueTokens # value #<= 3
             ]
         )
         ( pand'List
-            [ pvalueOf # value # padaSymbol # padaToken #>= expectedOil
-            , pvalueOf # value # raisingSymbol # raisingToken #== committed
-            , pcountOfUniqueTokens # value #<= 4
+            [ ptraceIfFalse "nvc4" $ pvalueOf # value # padaSymbol # padaToken #>= expectedOil
+            , ptraceIfFalse "nvc5" $ pvalueOf # value # raisingSymbol # raisingToken #== committed
+            , ptraceIfFalse "nvc6" $ pcountOfUniqueTokens # value #<= 4
             ]
         )
     ]
