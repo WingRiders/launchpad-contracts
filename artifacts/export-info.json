@@ -19,8 +19,8 @@
     },
     {
       "name": "pool-proof-policy",
-      "size": 4345,
-      "symbol": "804cb1413e803c57a226ab6f991428c2ea58ec324e5f23af5f913e54"
+      "size": 4341,
+      "symbol": "2af099f2743a2ecd246af364f585288cead9702037f592387d179e17"
     },
     {
       "name": "project-tokens-holder-policy",
@@ -70,9 +70,9 @@
       "size": 7
     },
     {
-      "hash": "99eeb6cb13300a45b800089b60e68d0fdac4c9094299996fba34dc1a",
+      "hash": "04df8380f19389e504510e69e304d68828c22abc7841e625c82dcc49",
       "name": "project-tokens-holder-final",
-      "size": 6190
+      "size": 6182
     },
     {
       "hash": "67d322de99a3815c99e7eb74bfbacab081ed7f9720bdf9447f0ccb79",
